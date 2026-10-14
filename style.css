@@ -59,6 +59,7 @@ input[type=text], input[type=password], input[type=search], input:not([type]), t
 /* connexion */
 .auth { overflow-y: auto; } .auth-inner { max-width: 420px; width: 100%; margin: 0 auto; padding: 24px 4px; }
 .brand { text-align: center; padding: 12px; } .brand h1 { font-size: 2rem; color: var(--accent); letter-spacing: -.03em; } .brand-mark { display: inline-grid; place-items: center; width: 56px; height: 56px; border-radius: 16px; background: var(--accent); color: var(--accent-ink); margin-bottom: 6px; }
+.brand-img { width: 84px; height: 84px; border-radius: 22px; display: block; margin: 0 auto 6px; }
 .auth .tabs { padding: 0 12px; } .created { text-align: center; } .big-id { font-size: 2.2rem; font-weight: 800; letter-spacing: .08em; margin: 14px 0; color: var(--accent); font-variant-numeric: tabular-nums; }
 .created .btn { margin-top: 10px; }
 

@@ -26,7 +26,7 @@ Piaf.convMenu = (c, opts = {}) => sheet(Piaf.convName(c), [
 Piaf.views.auth = () => {
   let mode = 'login', created = null, busy = false;
   const el = h('div', { class: 'screen auth' });
-  const brand = h('div', { class: 'brand' }, h('span', { class: 'brand-mark' }, icon('bubble', 30)), h('h1', null, 'Piaf'), h('p', { class: 'muted' }, 'Messagerie privée, simple et légère'));
+  const brand = h('div', { class: 'brand' }, h('img', { class: 'brand-img', src: 'icons/icon.svg', alt: '', width: '84', height: '84' }), h('h1', null, 'Piaf'), h('p', { class: 'muted' }, 'Messagerie privée, simple et légère'));
 
   function field(label, input, extra) { return h('label', { class: 'field' }, h('span', null, label), input, extra || null); }
   function secretInput(auto) {
