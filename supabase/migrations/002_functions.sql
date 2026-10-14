@@ -42,8 +42,16 @@ begin
                  where p.public_id = q and p.id <> auth.uid();
   elsif char_length(q) >= 3 then
     return query select p.id, p.public_id, p.display_name from public.profiles p
-                 where lower(p.display_name) like '%' || replace(replace(replace(lower(q), '\', '\\'), '%', '\%'), '_', '\_') || '%'
-                   and p.id <> auth.uid()
+                 where lower(p.display_name) LIKE
+  '%' || replace(
+    replace(
+      replace(lower(q), E'\\', E'\\\\'),
+      '%', E'\\%'
+    ),
+    '_', E'\\_'
+  ) || '%'
+  ESCAPE E'\\'
+  AND p.id <> auth.uid()
                  order by p.display_name limit 20;
   end if;
 end $$;
