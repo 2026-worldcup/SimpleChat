@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Piaf — confidentialité et données</title>
+  <style>
+    body { font: 16px/1.55 system-ui, sans-serif; max-width: 720px; margin: 0 auto; padding: 20px 16px 48px; color: #1d1712; background: #fbf7f2; }
+    h1 { color: #c2410c; } h2 { margin-top: 1.8em; font-size: 1.15rem; } a { color: #c2410c; }
+    .todo { background: #fff3cd; border: 1px solid #e6c45c; border-radius: 8px; padding: 2px 8px; font-weight: 600; }
+    table { border-collapse: collapse; width: 100%; font-size: .92rem; } td, th { border: 1px solid #e6dccf; padding: 6px 8px; text-align: left; vertical-align: top; }
+    @media (prefers-color-scheme: dark) { body { background: #17120e; color: #f4ece4; } td, th { border-color: #3a2f26; } .todo { color: #1d1712; } }
+  </style>
+</head>
+<body>
+  <p><a href="./">← Retour à Piaf</a></p>
+  <h1>Confidentialité et données</h1>
+  <p><strong>Ce document est un modèle prêt à compléter. Il décrit ce que l'application fait réellement, mais il ne remplace pas un avis juridique.</strong>
+     Les passages <span class="todo">À COMPLÉTER</span> doivent être renseignés par le propriétaire du projet avant toute ouverture au public.</p>
+
+  <h2>Qui est responsable ?</h2>
+  <p>Éditeur du service : <span class="todo">À COMPLÉTER : nom ou raison sociale</span><br>
+     Contact pour toute question ou demande sur vos données : <span class="todo">À COMPLÉTER : adresse e-mail de contact</span></p>
+
+  <h2>Quelles données sont enregistrées ?</h2>
+  <table>
+    <tr><th>Donnée</th><th>Pourquoi</th><th>Durée de conservation</th></tr>
+    <tr><td>Nom d'affichage et identifiant à 8 chiffres</td><td>Vous retrouver et afficher votre nom</td><td>Jusqu'à la suppression du compte</td></tr>
+    <tr><td>Code secret (jamais en clair : une empreinte est conservée par Supabase Auth)</td><td>Vous connecter</td><td>Jusqu'à la suppression du compte</td></tr>
+    <tr><td>Messages, réactions, épingles, statuts (envoyé, distribué, lu, avec l'heure)</td><td>Faire fonctionner la messagerie</td><td>Jusqu'à suppression par vous ou par l'autre personne, ou suppression d'un des deux comptes</td></tr>
+    <tr><td>Photos et vidéos (fichiers privés) et leurs métadonnées (nom, taille, date)</td><td>Partage de médias</td><td>Jusqu'à « supprimer pour tout le monde » ou suppression du compte</td></tr>
+    <tr><td>Réglages (confirmations de lecture, notifications), contacts bloqués, discussions archivées ou en favori</td><td>Personnalisation</td><td>Jusqu'à suppression du compte</td></tr>
+    <tr><td>Signalements (motif, et le texte du message signalé s'il y en a un)</td><td>Modération</td><td><span class="todo">À COMPLÉTER : durée de conservation des signalements</span></td></tr>
+    <tr><td>Empreinte non réversible de l'adresse IP à l'inscription (pas l'IP elle-même)</td><td>Limiter la création abusive de comptes</td><td>7 jours</td></tr>
+    <tr><td>Compteurs d'échecs de connexion (par identifiant, et par identifiant + empreinte d'IP)</td><td>Se protéger des tentatives répétées</td><td>Effacés après une connexion réussie, sinon 2 jours</td></tr>
+    <tr><td>Journaux techniques de l'hébergeur (Supabase, GitHub)</td><td>Fonctionnement et sécurité de l'hébergeur</td><td>Selon leurs politiques respectives</td></tr>
+  </table>
+  <p>Piaf <strong>ne demande ni e-mail ni numéro de téléphone</strong>. L'identifiant à 8 chiffres sert à retrouver quelqu'un ; il ne prouve pas son identité. En interne, un e-mail technique fictif de la forme « identifiant@piaf.invalid » est utilisé : il ne reçoit jamais de message.</p>
+
+  <h2>Qui voit quoi ?</h2>
+  <ul>
+    <li>Les messages et médias d'une discussion ne sont visibles que par ses deux participants (contrôle d'accès au niveau de la base de données).</li>
+    <li>Les messages <strong>ne sont pas chiffrés de bout en bout</strong> : ils sont protégés en transit (HTTPS) et par le contrôle d'accès, mais l'administrateur technique du projet Supabase y a techniquement accès.</li>
+    <li>Votre nom d'affichage et votre identifiant sont visibles par les personnes qui vous recherchent (identifiant exact, ou début de nom d'au moins 3 lettres).</li>
+    <li>Si vous désactivez les confirmations de lecture, les autres ne voient plus quand vous lisez leurs messages, et vous ne voyez plus les leurs.</li>
+  </ul>
+
+  <h2>Hébergement</h2>
+  <p>Le site est servi par GitHub Pages. Les données sont stockées chez Supabase, dans la région configurée pour le projet (<span class="todo">À COMPLÉTER : vérifier la région du projet et les garanties de transfert hors UE applicables</span>).</p>
+
+  <h2>Supprimer vos données</h2>
+  <p>Dans <em>Paramètres → Supprimer mon compte</em>, votre profil, vos conversations (pour les deux personnes) et tous les fichiers envoyés sont effacés. « Supprimer pour moi » masque seulement un contenu de votre côté. « Supprimer pour tout le monde » efface le contenu pour les deux personnes, mais ne peut pas effacer les copies déjà téléchargées ou capturées par quelqu'un d'autre.</p>
+
+  <h2>Vos droits</h2>
+  <p>Selon le droit applicable (en France : RGPD et loi Informatique et Libertés), vous pouvez demander l'accès, la rectification, l'effacement, la limitation ou l'opposition, et introduire une réclamation auprès de la CNIL. Le nom d'affichage se modifie et le compte se supprime dans l'application. <strong>Il n'existe pas encore d'export automatique de vos données</strong> : pour une copie, écrivez au contact ci-dessus.</p>
+
+  <h2>Pas de récupération de compte</h2>
+  <p>Sans e-mail ni téléphone, il est impossible de récupérer un compte dont la session et le code secret sont perdus. Notez votre identifiant et votre code secret.</p>
+
+  <h2>Cookies et stockage local</h2>
+  <p>Piaf n'utilise ni publicité ni suivi. Le navigateur conserve localement votre session, vos brouillons, vos messages en attente d'envoi, votre thème et un cache de l'application, afin que tout fonctionne et reste connecté.</p>
+</body>
+</html>

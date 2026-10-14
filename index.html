@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>Piaf — messagerie privée</title>
+  <meta name="description" content="Piaf : messagerie privée simple et légère.">
+  <meta name="theme-color" content="#fbf7f2">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Piaf">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="shell">
+    <div id="netbar" class="netbar" role="status" hidden></div>
+    <main id="app"><div class="boot"><div class="spinner" role="status" aria-label="Chargement"></div></div></main>
+  </div>
+  <div id="layers"></div>
+  <div id="toasts" aria-live="polite"></div>
+  <noscript><p style="padding:24px">Piaf a besoin de JavaScript pour fonctionner.</p></noscript>
+  <script src="vendor/supabase.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script src="views-home.js"></script>
+  <script src="views-chat.js"></script>
+</body>
+</html>
