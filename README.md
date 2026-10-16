@@ -5,7 +5,7 @@ Frontend statique (HTML/CSS/JS, sans framework) sur **GitHub Pages** ; backend *
 
 ## État honnête du projet
 
-Le code de l'application, le schéma SQL, les politiques de sécurité et les Edge Functions sont écrits. **Rien de ce qui touche à Supabase n'a encore été testé de bout en bout** : voir « Tests » plus bas. Ne considérez une fonctionnalité comme opérationnelle qu'après avoir fait tourner la liste de tests.
+Le code de l'application, le schéma SQL, les politiques de sécurité et les Edge Functions sont écrits. Le schéma, les politiques de sécurité et les fonctions serveur sont déployés sur Supabase et ont subi des tests ciblés côté base de données (voir « Tests »). **L'application complète (navigateur + Edge Functions) n'a pas encore été testée de bout en bout** : inscription/connexion réelles, envoi réel de fichiers, temps réel, installation sur téléphone restent à vérifier.
 
 ### Fonctionnalités écrites (à valider par les tests)
 - Création de compte : nom d'affichage + identifiant à 8 chiffres non séquentiel + code secret (8 caractères minimum), sans e-mail ; affichage et copie de l'identifiant.
@@ -82,10 +82,11 @@ Dépôt → Settings → Pages → *Deploy from a branch* → `main` / racine. L
 
 ## Tests
 
-Liste de la mission et état. **Aucune case n'est cochée tant que le test n'a pas été exécuté.**
-À exécuter avec deux comptes (A et B) et un troisième (C) pour les contrôles d'accès : création de comptes, persistance de session, recherche, temps réel, accusés de lecture, modification/suppressions, photo valide/trop grosse, vidéo, envoi groupé > 10, quota atteint, téléchargement sans effet sur le quota, suppression pour tous (libération réelle), échec de suppression, accès interdit pour C (messages et fichiers), tentatives de connexion abusives, coupure réseau, écran étroit avec clavier, chemin GitHub Pages en sous-répertoire, boutons et états vides.
+### Exécutés (16/10/2026, base de données Supabase, comptes fictifs, tout annulé ensuite)
+Réussis : inscription directe refusée ; création automatique des profils ; recherche par identifiant ; création de conversation (idempotente) ; un tiers ne voit ni conversations, ni messages, ni ne peut écrire dans la conversation ; écriture directe dans les tables refusée ; modification et suppression « pour tous » refusées à qui n'est pas l'auteur, acceptées pour l'auteur ; réservation photo valide ; photo > 10 Mo, vidéo > 25 Mo, PDF, SVG, plus de 10 fichiers refusés ; réservation par un tiers refusée ; 3 vidéos de 25 Mo acceptées puis dépassement des 100 Mo refusé (quota exact) ; envoi refusé après blocage. Vérification de sécurité Supabase : aucun problème critique (les avertissements listés concernent les fonctions volontairement appelables par les utilisateurs connectés, qui vérifient elles-mêmes l'identité).
 
-Tests non exécutables sans un appareil réel : clavier virtuel iOS/Android, notifications, installation PWA, lecture vidéo HEIC/MOV selon le navigateur.
+### Non exécutés
+Tout ce qui passe par le navigateur ou les Edge Functions (l'environnement de développement ne pouvait pas les appeler) : inscription et connexion réelles, persistance de session, verrouillage après essais ratés, envoi réel de fichiers et contrôle de leur taille réelle, téléchargement sans effet sur le quota, suppression réelle d'un fichier et libération du quota, accès aux fichiers par un tiers, temps réel, accusés de lecture à l'écran, coupure réseau, écran étroit avec clavier, GitHub Pages en sous-répertoire. Non testables sans appareil réel : clavier virtuel iOS/Android, notifications, installation PWA, lecture HEIC/MOV.
 
 ## Sécurité : rappels
 - RLS activée sur toutes les tables ; les clients n'ont que des droits de lecture (et la mise à jour de quelques réglages personnels). Toute écriture passe par des fonctions qui vérifient membre/auteur/blocage.
