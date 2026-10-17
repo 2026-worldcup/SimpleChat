@@ -140,23 +140,23 @@ Piaf.views.home = () => {
 Piaf.views.new = () => {
   let timer = null, seq = 0;
   const results = h('div', { class: 'results', role: 'list' });
-  const hint = h('p', { class: 'muted center' }, 'Saisissez un identifiant à 8 chiffres, ou au moins 3 lettres d’un nom d’affichage.');
+  const hint = h('p', { class: 'muted center' }, 'Saisissez l’identifiant exact à 8 chiffres de la personne.');
   async function start(publicId) {
     try { const id = await api.rpc('start_conversation', { p_public_id: publicId }); await Piaf.refreshConvs(); Piaf.go('#/c/' + id); }
     catch (e) { toast(toCode(e) === 'not_found' ? 'Aucune personne avec cet identifiant.' : errText(e), { error: true }); }
   }
-  const input = h('input', { type: 'search', inputmode: 'search', placeholder: 'Identifiant ou nom', 'aria-label': 'Identifiant ou nom', autocomplete: 'off',
+  const input = h('input', { type: 'search', inputmode: 'numeric', placeholder: 'Identifiant à 8 chiffres', 'aria-label': 'Identifiant à 8 chiffres', autocomplete: 'off',
     onkeydown: (e) => { const d = input.value.replace(/\s/g, ''); if (e.key === 'Enter' && /^[1-9][0-9]{7}$/.test(d)) start(d); },
     oninput: () => { clearTimeout(timer); timer = setTimeout(run, 300); } });
   async function run() {
     const mine = ++seq; let v = input.value.trim(); if (/^[0-9 ]+$/.test(v)) v = v.replace(/\s/g, '');
-    if (v.length < 3) { results.replaceChildren(hint); return; }
+    if (!/^[1-9][0-9]{7}$/.test(v)) { results.replaceChildren(hint); return; }
     results.replaceChildren(h('p', { class: 'muted center' }, 'Recherche…'));
     try {
       const rows = await api.rpc('find_user', { p_query: v }); if (mine !== seq) return;
       results.replaceChildren(...(rows.length ? rows.map((u) => h('button', { class: 'conv-open result', type: 'button', onclick: () => start(u.public_id) },
         avatar(u.display_name), h('span', { class: 'conv-main' }, h('span', { class: 'conv-name' }, u.display_name), h('span', { class: 'muted small' }, 'Identifiant ' + fmt.id8(u.public_id))))) :
-        [h('p', { class: 'muted center' }, 'Personne trouvé avec cette recherche.')]));
+        [h('p', { class: 'muted center' }, 'Aucune personne avec cet identifiant.')]));
     } catch (e) { if (mine === seq) results.replaceChildren(h('p', { class: 'form-error center' }, errText(e))); }
   }
   results.append(hint);

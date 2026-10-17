@@ -10,7 +10,7 @@ Le code de l'application, le schéma SQL, les politiques de sécurité et les Ed
 ### Fonctionnalités écrites (à valider par les tests)
 - Création de compte : nom d'affichage + identifiant à 8 chiffres non séquentiel + code secret (8 caractères minimum), sans e-mail ; affichage et copie de l'identifiant.
 - Connexion identifiant + code, verrouillage progressif après échecs, session persistante, pas de bouton de déconnexion, révocation des autres sessions, suppression du compte.
-- Liste des discussions (récentes, favoris, archivées, non lus, silence, renommage local), recherche par identifiant ou nom.
+- Liste des discussions (récentes, favoris, archivées, non lus, silence, renommage local), recherche par identifiant exact (8 chiffres).
 - Messages en temps réel, groupés, liens cliquables, réponse, modification, réaction, transfert (texte), épinglage, recherche, copie, suppression pour moi / pour tous, brouillons, file d'envoi hors ligne sans doublon.
 - Statuts : en cours, envoyé, distribué, lu (avec heure), échec + réessai ; confirmations de lecture désactivables (réciproque).
 - Photos et vidéos : envoi groupé avec aperçu, progression, annulation, visionneuse, téléchargement, galerie avec quota, suppression pour moi / pour tous (suppression réelle du fichier).

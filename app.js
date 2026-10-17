@@ -330,7 +330,7 @@ function parseRoute() {
   return { name: 'home' };
 }
 Piaf.go = (hash) => { if (location.hash === hash) render(); else location.hash = hash; };
-Piaf.back = (fallback) => { if (history.length > 1 && S.route.fromApp) history.back(); else Piaf.go(fallback); };
+Piaf.back = (target) => { if (location.hash === target || (!location.hash && target === '#/')) render(); else location.replace(target); };
 function render() {
   current?.destroy?.(); current = null; layers.slice().forEach((l) => l.close());
   const root = $('#app'); root.replaceChildren();

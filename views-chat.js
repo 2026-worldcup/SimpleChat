@@ -520,7 +520,7 @@ Piaf.views.gallery = (route) => {
   }
   const unsubs = [bus.on('media', () => load()), bus.on('conv', (p) => { if (p.new?.id === convId) load(); }), bus.on('resync', () => load())];
   drawSeg(); drawUsage();
-  const el = h('div', { class: 'screen gallery' }, h('header', { class: 'topbar' }, iconBtn('back', 'Retour à la discussion', () => Piaf.go('#/c/' + convId)), h('h1', null, 'Médias partagés')),
+  const el = h('div', { class: 'screen gallery' }, h('header', { class: 'topbar' }, iconBtn('back', 'Retour à la discussion', () => Piaf.back('#/c/' + convId)), h('h1', null, 'Médias partagés')),
     h('div', { class: 'scroll' }, usage, h('div', { class: 'filters' }, seg, h('div', { class: 'searchbar' }, icon('search', 18), search)), grid, h('div', { class: 'center pad' }, moreBtn)));
   return { el, mounted() { load(); }, destroy() { destroyed = true; unsubs.forEach((u) => u()); } };
 };
