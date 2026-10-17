@@ -36,6 +36,7 @@ privacy.html         ← modèle de politique de confidentialité (à compléter
 supabase/migrations/001_schema.sql      tables, vues, déclencheurs d'inscription
 supabase/migrations/002_functions.sql   logique serveur (RPC), quotas atomiques
 supabase/migrations/003_security.sql    RLS, privilèges, bucket privé, temps réel
+supabase/migrations/004_signup_gate.sql  correctif : contrôle d'inscription par jeton secret
 supabase/functions/auth/                inscription, connexion, suppression de compte
 supabase/functions/media/               finalisation d'envoi, suppression réelle, nettoyage
 ```

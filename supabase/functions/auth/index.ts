@@ -111,11 +111,13 @@ async function signup(req: Request, b: any) {
   ]);
   if ((byIp ?? 0) >= 10 || (global ?? 0) >= 200) return json(429, { error: "signup_rate_limited" });
 
+  const { data: gate } = await admin.from("signup_gate").select("token").limit(1).maybeSingle();
+  if (!gate?.token) { console.error("signup_gate vide"); return json(500, { error: "server_misconfigured" }); }
   for (let attempt = 0; attempt < 12; attempt++) {
     const id = randomId();
     const { error } = await admin.auth.admin.createUser({
       email: emailOf(id), password: await derive(id, secret), email_confirm: true,
-      app_metadata: { piaf: "1" }, user_metadata: { display_name: name },
+      app_metadata: { piaf: "1" }, user_metadata: { display_name: name, piaf_gate: gate.token },
     });
     if (error) {
       if (/already|exists|registered|duplicate/i.test(error.message)) continue; // collision : on retire un autre identifiant

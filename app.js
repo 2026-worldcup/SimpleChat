@@ -221,14 +221,14 @@ function startRealtime() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'conversation_members' }, on('members', 'member'))
     .subscribe((status) => {
       S.rt = status; bus.emit('net');
-      if (status === 'SUBSCRIBED') { if (everSubscribed) bus.emit('resync'); everSubscribed = true; rpc('mark_delivered_all').catch(() => {}); }
+      if (status === 'SUBSCRIBED') { if (everSubscribed) bus.emit('resync'); everSubscribed = true; if (S.me) rpc('mark_delivered_all').catch(() => {}); }
     });
 }
 function stopRealtime() { if (channel) { sb.removeChannel(channel); channel = null; everSubscribed = false; } }
 
 window.addEventListener('online', () => { S.online = true; bus.emit('net'); bus.emit('resync'); Piaf.flushOutbox?.(); sweepMedia(); });
 window.addEventListener('offline', () => { S.online = false; bus.emit('net'); });
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { bus.emit('visible'); rpc('mark_delivered_all').catch(() => {}); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { bus.emit('visible'); if (S.me) rpc('mark_delivered_all').catch(() => {}); } });
 function sweepMedia() { if (S.me && navigator.onLine) Piaf.api.media({ action: 'sweep' }).catch(() => {}); }
 Piaf.sweepMedia = sweepMedia;
 
