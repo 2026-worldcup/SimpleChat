@@ -31,6 +31,8 @@ Le code de l'application, le schéma SQL, les politiques de sécurité et les Ed
 
 ```
 index.html, style.css, app.js (noyau), views-home.js, views-chat.js   ← frontend
+assistant-kb.js      ← Talk2Piaf : base de connaissances + moteur de réponse (sans dépendance, testable sous Node)
+assistant.js         ← Talk2Piaf : fenêtre de discussion et boutons d'action (vraies opérations de l'application)
 config.js            ← URL du projet + clé PUBLIQUE (publishable) uniquement
 vendor/supabase.js   ← supabase-js 2.117.2 (publiée le 25/09/2026), copiée localement
 sw.js, manifest.webmanifest, icons/                                    ← PWA
@@ -47,6 +49,12 @@ PLAN_GROUPES.md      plan de la gestion des groupes
 supabase/functions/auth/                inscription, connexion, suppression de compte
 supabase/functions/media/               finalisation d'envoi, suppression réelle, nettoyage
 ```
+
+### Assistant Talk2Piaf
+Assistant intégré, qui s'exécute **entièrement sur l'appareil** (aucun appel réseau, aucun modèle distant) : `assistant-kb.js` contient une centaine de sujets (compte, discussions, messages, médias, groupes, sécurité, réglages, assistance) et quelques services (heure, calculs, tirages au sort, blagues, aide à la rédaction) ; il lit l'état réel de l'application (identifiant, discussions, non lus, réglages) pour répondre de façon personnalisée.
+Les réponses peuvent contenir des **liens** et des **boutons d'action** qui ne s'exécutent qu'à l'appui : ouvrir un écran ou une discussion, démarrer une discussion avec un identifiant, envoyer un message préparé (« écris à Marie : j'arrive »), favori / archive / silence, thème, notifications, confirmations de lecture, nom et photo de profil, invitation, révocation des autres sessions, phrase secrète aléatoire.
+L'historique de l'échange reste dans le navigateur (clé par compte) et peut être effacé depuis la fenêtre. Le bouton d'accès est masqué : mettre `SHOW_BUTTON = true` en tête de `assistant.js` pour l'afficher.
+Tests du moteur : `node tests/assistant-kb.test.js` (sans dépendance). Toute modification de `TOPICS` doit les laisser au vert : en particulier, chaque question proposée en puce doit renvoyer à son propre sujet.
 
 ### Authentification
 Supabase Auth n'offre pas de mode « identifiant à 8 chiffres + code ». Solution retenue :
