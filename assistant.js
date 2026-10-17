@@ -8,8 +8,8 @@
   if (!P || !KB) return;
   const { h, S, api, sb, toast, errText, toCode, copyText, confirmDialog, promptDialog, store } = P;
 
-  // Accès depuis l'écran d'accueil : passer à true pour afficher le bouton (il est masqué pour l'instant).
-  const SHOW_BUTTON = false;
+  // Accès depuis l'écran d'accueil : true = bouton affiché, false = bouton masqué.
+  const SHOW_BUTTON = true;
   const OLD_KEYS = ['piaf-talk2piaf-history-v2'];
   const keyFor = () => 'piaf-talk2piaf-v3-' + (S.me ? S.me.id : 'anon');
   const MAX_MSGS = 60;
@@ -262,7 +262,7 @@
 
   P.openAssistant = open;
 
-  // ---------------------------------------------------------------- bouton d'accès (masqué tant que SHOW_BUTTON est false)
+  // ---------------------------------------------------------------- bouton d'accès (affiché ou masqué selon SHOW_BUTTON)
   function mountButton() {
     const topbar = document.querySelector('.home .topbar');
     if (!topbar || document.getElementById('talk2piaf-fab')) return;
@@ -271,4 +271,5 @@
     if (settings) topbar.insertBefore(b, settings); else topbar.append(b);
   }
   new MutationObserver(mountButton).observe(document.body, { childList: true, subtree: true });
+  mountButton();
 })();
