@@ -68,7 +68,7 @@ input[type=text], input[type=password], input[type=search], input:not([type]), t
 .conv-list, .results { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 96px; }
 .conv { display: flex; align-items: center; border-bottom: 1px solid var(--line); } .conv.unread .conv-name, .conv.unread .conv-prev { font-weight: 700; color: var(--ink); }
 .conv-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 10px 4px 10px 14px; border: 0; background: transparent; text-align: left; min-height: 68px; width: 100%; }
-.conv-main { flex: 1; min-width: 0; display: grid; gap: 2px; } .conv-top, .conv-bot { display: flex; align-items: center; gap: 6px; justify-content: space-between; }
+.conv-main { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; } .conv-top, .conv-bot { display: flex; align-items: center; gap: 6px; justify-content: space-between; }
 .conv-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .conv-time { font-size: .78rem; color: var(--muted); flex: none; }
 .conv-prev { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; font-size: .92rem; } .conv-bot .ico { color: var(--muted); }
 .skeleton { padding: 12px 14px; gap: 12px; } .sk-line { display: block; height: 12px; border-radius: 6px; background: var(--surface2); } .w60 { width: 60%; } .w90 { width: 90%; margin-top: 8px; }
@@ -166,3 +166,5 @@ input[type=text], input[type=password], input[type=search], input:not([type]), t
 .mention-item { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 8px; border: 0; background: transparent; border-radius: 10px; text-align: left; color: inherit; } .mention-item.on, .mention-item:active { background: var(--surface2); }
 .mention-name { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bubble.whisper { border-style: dashed; } .t2p-name { color: var(--accent, #c2410c); }
+
+.conv-top > *, .conv-bot > * { min-width: 0; } .conv-prev { display: block; min-width: 0; }

@@ -95,7 +95,9 @@ Piaf.views.home = () => {
   const tabsEl = h('div', { class: 'tabs small', role: 'tablist' });
   const fab = h('button', { class: 'fab', type: 'button', 'aria-label': 'Nouvelle discussion', onclick: () => Piaf.go('#/new') }, icon('plus', 26));
 
-  function preview(c) {
+  const clip = (t) => { const x = String(t == null ? '' : t).replace(/\s+/g, ' ').trim(); return x.length > 120 ? x.slice(0, 120) + '…' : x; };
+  function preview(c) { return clip(rawPreview(c)); }
+  function rawPreview(c) {
     if (!c.last_message_id) return 'Nouvelle discussion';
     if (c.last_deleted) return 'Message supprimé';
     if (c.last_kind === 'system') return c.last_body;
