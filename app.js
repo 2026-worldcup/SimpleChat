@@ -24,7 +24,8 @@ function h(tag, attrs, ...kids) {
 }
 const $ = (s, el = document) => el.querySelector(s);
 
-const ICONS = { // tracés 24×24, icônes trait fin (constantes, jamais de contenu utilisateur)
+const ICONS = {
+  camera: '<path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/>', // tracés 24×24, icônes trait fin (constantes, jamais de contenu utilisateur)
   back: '<path d="M15 18l-6-6 6-6"/>', plus: '<path d="M12 5v14M5 12h14"/>', x: '<path d="M18 6L6 18M6 6l12 12"/>',
   send: '<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>',
   clip: '<path d="M21.4 11.6l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/>',
@@ -88,9 +89,20 @@ const fmt = {
 };
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c) => (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16)));
 
-function avatar(name, size = 44) {
+// Photos de profil : fichiers JPEG 256×256 dans le bucket privé `avatars`, chargés une fois par chemin (le chemin change à chaque nouvelle photo).
+const avatarUrls = new Map();
+function avatarUrl(path) {
+  if (!avatarUrls.has(path)) avatarUrls.set(path, sb.storage.from('avatars').download(path)
+    .then(({ data, error }) => { if (error || !data) throw error || new Error('vide'); return URL.createObjectURL(data); })
+    .catch(() => { avatarUrls.delete(path); return null; }));
+  return avatarUrls.get(path);
+}
+function avatar(name, size = 44, userId) {
   let hash = 0; for (const ch of name || '?') hash = (hash * 31 + ch.codePointAt(0)) >>> 0;
-  return h('span', { class: 'avatar', style: { width: size + 'px', height: size + 'px', fontSize: size * 0.42 + 'px', '--hue': String(hash % 360) }, 'aria-hidden': 'true' }, [...(name || '?')][0].toUpperCase());
+  const el = h('span', { class: 'avatar', style: { width: size + 'px', height: size + 'px', fontSize: size * 0.42 + 'px', '--hue': String(hash % 360) }, 'aria-hidden': 'true' }, [...(name || '?')][0].toUpperCase());
+  const p = userId && (S.me && userId === S.me.id ? S.me.avatar_path : S.avatars[userId]);
+  if (p) avatarUrl(p).then((u) => { if (u) el.replaceChildren(h('img', { src: u, alt: '' })); });
+  return el;
 }
 
 // Texte → nœuds, avec liens http(s) cliquables et sûrs.
@@ -116,6 +128,7 @@ const ERR = {
   rate_limited: 'Trop d’actions en peu de temps. Réessayez dans un instant.',
   invalid_input: 'Contenu invalide.', window_expired: 'Le délai pour cette action est dépassé.',
   too_many_pins: '5 messages épinglés au maximum par conversation.', use_media_delete: 'Utilisez la suppression du média.',
+  bad_image: 'Image illisible. Essayez une photo JPEG ou PNG.',
   bad_type: 'Format non accepté. Photos : JPEG, PNG, WebP, GIF, HEIC. Vidéos : MP4, WebM, MOV.',
   file_too_large: 'Fichier trop volumineux.', upload_missing: 'Le fichier n’est pas arrivé sur le serveur. Réessayez.',
   delete_failed: 'Le fichier n’a pas pu être supprimé du serveur pour l’instant. Il reste masqué et la suppression sera retentée.',
@@ -141,7 +154,7 @@ function errText(e) {
 }
 
 // ------------------------------------------------------------------ état global + bus
-const S = Piaf.S = { me: null, settings: { read_receipts: true, notifications: true }, cfg: {}, online: navigator.onLine, rt: 'CONNECTING', convs: [], route: { name: 'boot' } };
+const S = Piaf.S = { me: null, settings: { read_receipts: true, notifications: true }, cfg: {}, online: navigator.onLine, rt: 'CONNECTING', convs: [], route: { name: 'boot' }, avatars: {} };
 const bus = Piaf.bus = (() => {
   const m = new Map();
   return {
@@ -195,7 +208,7 @@ async function loadSession() {
   if (!uid) return false;
   try {
     const [me, set, cfg] = await Promise.all([
-      q(sb.from('profiles').select('id,public_id,display_name,created_at').eq('id', uid).single()),
+      q(sb.from('profiles').select('id,public_id,display_name,avatar_path,created_at').eq('id', uid).single()),
       q(sb.from('user_settings').select('read_receipts,notifications').eq('user_id', uid).single()),
       q(sb.from('app_config').select('key,value')),
     ]);
@@ -238,7 +251,32 @@ async function refreshConvs() {
   S.convs = await rpc('list_conversations');
   S.convsLoaded = true;
   bus.emit('convs');
+  loadAvatars().catch(() => {});
 }
+async function loadAvatars() {
+  const ids = [...new Set(S.convs.map((c) => c.other_id))]; if (!ids.length) return;
+  const rows = await q(sb.from('profiles').select('id,avatar_path').in('id', ids));
+  let changed = false;
+  for (const r of rows) if ((S.avatars[r.id] || null) !== (r.avatar_path || null)) { S.avatars[r.id] = r.avatar_path; changed = true; }
+  if (changed) bus.emit('convs');
+}
+// Change ou retire la photo de profil (recadrage carré au centre, 256 px, JPEG : les métadonnées de l'original ne sont jamais envoyées).
+Piaf.setAvatar = async (file) => {
+  const old = S.me.avatar_path;
+  if (!file) { await rpc('remove_avatar'); S.me.avatar_path = null; }
+  else {
+    if (!/^image\//.test(file.type)) throw new PiafError('bad_type');
+    let bmp; try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { throw new PiafError('bad_image'); }
+    const s = Math.min(bmp.width, bmp.height), c = document.createElement('canvas'); c.width = c.height = 256;
+    c.getContext('2d').drawImage(bmp, (bmp.width - s) / 2, (bmp.height - s) / 2, s, s, 0, 0, 256, 256); bmp.close?.();
+    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85)); if (!blob) throw new PiafError('bad_image');
+    const path = S.me.id + '/' + uuid() + '.jpg';
+    const up = await sb.storage.from('avatars').upload(path, blob, { contentType: 'image/jpeg' }); if (up.error) throw up.error;
+    try { await rpc('set_avatar', { p_path: path }); } catch (e) { sb.storage.from('avatars').remove([path]).catch(() => {}); throw e; }
+    S.me.avatar_path = path;
+  }
+  if (old) sb.storage.from('avatars').remove([old]).catch(() => {});
+};
 Piaf.refreshConvs = () => { clearTimeout(convTimer); return new Promise((res) => { convTimer = setTimeout(() => refreshConvs().then(res, res), 150); }); };
 Piaf.conv = (id) => S.convs.find((c) => c.conversation_id === id);
 Piaf.convName = (c) => (c.nickname || c.other_name);

@@ -160,6 +160,9 @@ async function deleteAccount(req: Request, b: any) {
       if (error) { console.error("storage cleanup", error.message); return json(502, { error: "storage_cleanup_failed" }); }
     }
   }
+  // 1b) photos de profil de la personne
+  const { data: av } = await admin.storage.from("avatars").list(u.user.id);
+  if (av?.length) await admin.storage.from("avatars").remove(av.map((f) => `${u.user.id}/${f.name}`));
   // 2) supprimer le compte : les profils, conversations, messages et métadonnées partent en cascade.
   const { error } = await admin.auth.admin.deleteUser(u.user.id);
   if (error) return json(500, { error: "delete_failed" });

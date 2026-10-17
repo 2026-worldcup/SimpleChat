@@ -1,6 +1,6 @@
 # Piaf — messagerie privée mobile
 
-Messagerie privée à deux, installable (PWA), en français, pensée pour smartphone.
+Messagerie privée à deux, installable (PWA), en français, pensée pour smartphone. **Argument central : on l'utilise sans adresse e-mail et sans numéro de téléphone** (identifiant à 8 chiffres + code secret) ; toute évolution doit préserver ce principe.
 Frontend statique (HTML/CSS/JS, sans framework) sur **GitHub Pages** ; backend **Supabase** (auth, PostgreSQL + RLS, temps réel, stockage privé, Edge Functions). Offres gratuites.
 
 ## État honnête du projet
@@ -14,6 +14,7 @@ Le code de l'application, le schéma SQL, les politiques de sécurité et les Ed
 - Messages en temps réel, groupés, liens cliquables, réponse, modification, réaction, transfert (texte), épinglage, recherche, copie, suppression pour moi / pour tous, brouillons, file d'envoi hors ligne sans doublon.
 - Statuts : en cours, envoyé, distribué, lu (avec heure), échec + réessai ; confirmations de lecture désactivables (réciproque).
 - Photos et vidéos : envoi groupé avec aperçu, progression, annulation, visionneuse, téléchargement, galerie avec quota, suppression pour moi / pour tous (suppression réelle du fichier).
+- Photo de profil (recadrée en carré 256 px côté appareil, JPEG, bucket privé visible seulement par soi et ses contacts de conversation) ; supprimée avec le compte.
 - Blocage, signalement, thème clair/sombre, notifications locales (application ouverte ou en arrière-plan).
 
 ### Non terminé / limites connues
@@ -37,6 +38,9 @@ supabase/migrations/001_schema.sql      tables, vues, déclencheurs d'inscriptio
 supabase/migrations/002_functions.sql   logique serveur (RPC), quotas atomiques
 supabase/migrations/003_security.sql    RLS, privilèges, bucket privé, temps réel
 supabase/migrations/004_signup_gate.sql  correctif : contrôle d'inscription par jeton secret
+supabase/migrations/005_find_user_exact.sql  recherche par identifiant exact
+supabase/migrations/006_avatars.sql      photos de profil
+PLAN_GROUPES.md      plan de la gestion des groupes (non implémentée)
 supabase/functions/auth/                inscription, connexion, suppression de compte
 supabase/functions/media/               finalisation d'envoi, suppression réelle, nettoyage
 ```

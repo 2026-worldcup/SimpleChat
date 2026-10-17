@@ -30,7 +30,7 @@ h1, h2 { margin: 0; line-height: 1.2; } h2 { font-size: 1.1rem; }
 .icon-btn { width: var(--tap); height: var(--tap); border: 0; background: transparent; border-radius: 50%; display: inline-grid; place-items: center; flex: none; }
 .icon-btn:active { background: var(--surface2); } .icon-btn.flip svg { transform: scaleX(-1); }
 .scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-.avatar { display: inline-grid; place-items: center; border-radius: 50%; flex: none; font-weight: 700; color: #fff; background: hsl(var(--hue, 20) 45% 42%); }
+.avatar { overflow: hidden; display: inline-grid; place-items: center; border-radius: 50%; flex: none; font-weight: 700; color: #fff; background: hsl(var(--hue, 20) 45% 42%); }
 .avatar.sk { width: 44px; height: 44px; background: var(--surface2); }
 .spinner { width: 28px; height: 28px; margin: 24px auto; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } } @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } * { scroll-behavior: auto !important; } }
@@ -126,3 +126,7 @@ input[type=text], input[type=password], input[type=search], input:not([type]), t
 .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; padding: 6px 12px; } .tile { position: relative; aspect-ratio: 1; border: 0; padding: 0; background: var(--surface2); border-radius: 6px; overflow: hidden; } .tile img, .tile video { width: 100%; height: 100%; object-fit: cover; }
 .tile-sz { position: absolute; right: 3px; bottom: 3px; font-size: .68rem; background: rgba(0,0,0,.65); color: #fff; border-radius: 6px; padding: 1px 5px; display: inline-flex; align-items: center; gap: 2px; } .grid .empty { grid-column: 1 / -1; }
 @media (min-width: 720px) { #shell { max-width: 720px; margin: 0 auto; border-left: 1px solid var(--line); border-right: 1px solid var(--line); } .grid { grid-template-columns: repeat(4, 1fr); } .layer { align-items: center; } .sheet { border-radius: 20px; } }
+
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.avatar-edit { position: relative; border: 0; background: none; padding: 0; cursor: pointer; border-radius: 50%; }
+.avatar-badge { position: absolute; right: -2px; bottom: -2px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--accent, #c2410c); color: #fff; border: 2px solid var(--bg, #fff); }

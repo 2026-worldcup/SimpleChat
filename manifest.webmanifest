@@ -1,7 +1,7 @@
 {
   "name": "Piaf — messagerie privée",
   "short_name": "Piaf",
-  "description": "Messagerie privée simple et légère.",
+  "description": "Messagerie privée simple et légère, sans adresse e-mail ni numéro de téléphone.",
   "lang": "fr",
   "start_url": "./",
   "scope": "./",

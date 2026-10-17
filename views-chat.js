@@ -116,7 +116,7 @@ Piaf.views.chat = (route) => {
 
   // ------------------------------------------------ en-tête / blocage
   function drawHeader() {
-    headTitle.replaceChildren(avatar(name(), 38), h('span', { class: 'chat-title-text' }, h('strong', null, name()),
+    headTitle.replaceChildren(avatar(name(), 38, conv && conv.other_id), h('span', { class: 'chat-title-text' }, h('strong', null, name()),
       h('span', { class: 'muted small' }, conv ? (conv.blocked_by_me ? 'Contact bloqué' : 'Identifiant ' + fmt.id8(conv.other_public_id)) : '…')));
     const blocked = conv?.blocked_by_me;
     composer.classList.toggle('blocked', !!blocked);
@@ -407,7 +407,7 @@ Piaf.views.chat = (route) => {
       { sep: true },
       conv.blocked_by_me ? { icon: 'ban', label: 'Débloquer ce contact', onClick: toggleBlock } : { icon: 'ban', danger: true, label: 'Bloquer ce contact', onClick: toggleBlock },
       { icon: 'flag', danger: true, label: 'Signaler cette personne', onClick: () => reportDialog(null) },
-    ], h('div', { class: 'profile-card' }, avatar(conv.other_name, 72), h('strong', { class: 'big' }, conv.other_name), conv.nickname ? h('span', { class: 'muted small' }, 'Renommé « ' + conv.nickname + ' » (visible par vous seul)') : null,
+    ], h('div', { class: 'profile-card' }, avatar(conv.other_name, 72, conv.other_id), h('strong', { class: 'big' }, conv.other_name), conv.nickname ? h('span', { class: 'muted small' }, 'Renommé « ' + conv.nickname + ' » (visible par vous seul)') : null,
       h('div', { class: 'muted' }, 'Identifiant ' + fmt.id8(conv.other_public_id)), h('button', { class: 'link-btn', type: 'button', onclick: () => copyText(conv.other_public_id) }, 'Copier l’identifiant')));
   }
   async function toggleBlock() {

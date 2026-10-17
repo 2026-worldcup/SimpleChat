@@ -26,7 +26,7 @@ Piaf.convMenu = (c, opts = {}) => sheet(Piaf.convName(c), [
 Piaf.views.auth = () => {
   let mode = 'login', created = null, busy = false;
   const el = h('div', { class: 'screen auth' });
-  const brand = h('div', { class: 'brand' }, h('img', { class: 'brand-img', src: 'icons/icon.svg', alt: '', width: '84', height: '84' }), h('h1', null, 'Piaf'), h('p', { class: 'muted' }, 'Messagerie privée, simple et légère'));
+  const brand = h('div', { class: 'brand' }, h('img', { class: 'brand-img', src: 'icons/icon.svg', alt: '', width: '84', height: '84' }), h('h1', null, 'Piaf'), h('p', { class: 'muted' }, 'Messagerie privée, simple et légère'), h('p', { class: 'muted small' }, 'Sans adresse e-mail, sans numéro de téléphone.'));
 
   function field(label, input, extra) { return h('label', { class: 'field' }, h('span', null, label), input, extra || null); }
   function secretInput(auto) {
@@ -119,7 +119,7 @@ Piaf.views.home = () => {
     }
     list.replaceChildren(...rows.map((c) => h('div', { class: 'conv' + (c.unread ? ' unread' : ''), role: 'listitem' },
       h('button', { class: 'conv-open', type: 'button', onclick: () => Piaf.go('#/c/' + c.conversation_id), 'aria-label': `${Piaf.convName(c)}${c.unread ? `, ${c.unread} non lus` : ''}` },
-        avatar(Piaf.convName(c)),
+        avatar(Piaf.convName(c), 44, c.other_id),
         h('span', { class: 'conv-main' },
           h('span', { class: 'conv-top' }, h('span', { class: 'conv-name' }, Piaf.convName(c)), h('span', { class: 'conv-time' }, fmt.listTime(c.last_at))),
           h('span', { class: 'conv-bot' }, h('span', { class: 'conv-prev' }, preview(c)),
@@ -155,7 +155,7 @@ Piaf.views.new = () => {
     try {
       const rows = await api.rpc('find_user', { p_query: v }); if (mine !== seq) return;
       results.replaceChildren(...(rows.length ? rows.map((u) => h('button', { class: 'conv-open result', type: 'button', onclick: () => start(u.public_id) },
-        avatar(u.display_name), h('span', { class: 'conv-main' }, h('span', { class: 'conv-name' }, u.display_name), h('span', { class: 'muted small' }, 'Identifiant ' + fmt.id8(u.public_id))))) :
+        avatar(u.display_name, 44, u.id), h('span', { class: 'conv-main' }, h('span', { class: 'conv-name' }, u.display_name), h('span', { class: 'muted small' }, 'Identifiant ' + fmt.id8(u.public_id))))) :
         [h('p', { class: 'muted center' }, 'Aucune personne avec cet identifiant.')]));
     } catch (e) { if (mine === seq) results.replaceChildren(h('p', { class: 'form-error center' }, errText(e))); }
   }
@@ -177,12 +177,20 @@ Piaf.views.settings = () => {
     const v = ok === undefined ? next : ok; b.setAttribute('aria-checked', String(v)); b.classList.toggle('on', v); } }, h('span')); return b; };
   async function saveSetting(patch) { await api.q(sb.from('user_settings').update(patch).eq('user_id', myId())); Object.assign(S.settings, patch); }
 
+  function photoMenu() {
+    const pick = () => { const f = h('input', { type: 'file', accept: 'image/*', style: { display: 'none' }, onchange: async () => {
+      const file = f.files[0]; f.remove(); if (!file) return;
+      try { toast('Envoi de la photo…'); await Piaf.setAvatar(file); toast('Photo mise à jour'); draw(); } catch (e) { toast(errText(e), { error: true }); } } });
+      document.body.append(f); f.click(); };
+    sheet('Photo de profil', [{ icon: 'camera', label: 'Choisir une photo', onClick: pick },
+      S.me.avatar_path ? { icon: 'trash', label: 'Supprimer la photo', danger: true, onClick: async () => { try { await Piaf.setAvatar(null); toast('Photo supprimée'); draw(); } catch (e) { toast(errText(e), { error: true }); } } } : null]);
+  }
   async function draw() {
     const theme = store.get('piaf-theme', 'auto');
     const perm = 'Notification' in window ? Notification.permission : 'unsupported';
     let blocked = []; try { blocked = await api.rpc('list_blocked'); } catch { /* hors ligne */ }
     body.replaceChildren(
-      section('Profil', h('div', { class: 'profile-head' }, avatar(S.me.display_name, 56), h('div', null, h('strong', { class: 'big' }, S.me.display_name), h('div', { class: 'muted' }, 'Identifiant ' + fmt.id8(S.me.public_id)))),
+      section('Profil', h('div', { class: 'profile-head' }, h('button', { class: 'avatar-edit', type: 'button', 'aria-label': 'Modifier la photo de profil', onclick: () => photoMenu() }, avatar(S.me.display_name, 64, S.me.id), h('span', { class: 'avatar-badge' }, icon('camera', 14))), h('div', null, h('strong', { class: 'big' }, S.me.display_name), h('div', { class: 'muted' }, 'Identifiant ' + fmt.id8(S.me.public_id)))),
         h('div', { class: 'btn-row' },
           h('button', { class: 'btn', type: 'button', onclick: () => copyText(S.me.public_id) }, icon('copy', 18), ' Copier l’identifiant'),
           h('button', { class: 'btn', type: 'button', onclick: async () => { const v = await promptDialog('Nom d’affichage', 'Nom visible par vos contacts', S.me.display_name); if (v === null) return;

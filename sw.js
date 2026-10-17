@@ -1,6 +1,6 @@
 /* Piaf — service worker : coquille de l'appli en cache (chargement rapide, installation PWA).
    Les appels à Supabase (autre origine) ne sont JAMAIS mis en cache : aucune donnée privée n'est stockée ici. */
-const CACHE = 'piaf-shell-v3';
+const CACHE = 'piaf-shell-v4';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'views-home.js', 'views-chat.js', 'config.js', 'vendor/supabase.js',
   'manifest.webmanifest', 'privacy.html', 'icons/icon.svg', 'icons/icon-192.png'];
 
