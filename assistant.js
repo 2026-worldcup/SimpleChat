@@ -1,7 +1,7 @@
-/* Talk2Piaf — assistant intégré. Historique local, interface dédiée et appel sécurisé à l'Edge Function. */
+/* Talk2Piaf — chatbot simulé, entièrement local. */
 (() => {
   'use strict';
-  const KEY = 'piaf-talk2piaf-history-v1';
+  const KEY = 'piaf-talk2piaf-history-v2';
   const history = (() => { try { const v = JSON.parse(localStorage.getItem(KEY) || '[]'); return Array.isArray(v) ? v.slice(-40) : []; } catch { return []; } })();
 
   const css = `
@@ -25,22 +25,62 @@
   `;
   const style = document.createElement('style'); style.textContent = css; document.head.append(style);
 
-  const esc = (s) => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(history.slice(-40))); } catch {} };
   const icon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 4.5c-5.8-1.7-11.7.1-15.1 4.6-2.1 2.8-1.8 6.3.7 8.4l-2.2 3.1 4.3-1.5c3.9 1.6 8.6.1 10.8-3.4 1.8-2.8 2.2-7.1 1.5-11.2Z"/><path d="M8.2 12.2c1.5-1.1 3.5-2 6.1-2.4"/><circle cx="9" cy="12.7" r=".7" fill="currentColor" stroke="none"/><circle cx="12" cy="11.7" r=".7" fill="currentColor" stroke="none"/><circle cx="15" cy="11.1" r=".7" fill="currentColor" stroke="none"/></svg>`;
+
+  function replyTo(text) {
+    const q = text.trim();
+    const l = q.toLocaleLowerCase('fr-FR');
+    const previous = history.filter(m => m.role === 'user').slice(-2).map(m => m.content).join(' ');
+
+    if (/^(bonjour|salut|hello|bonsoir|coucou|hey)\b/.test(l)) {
+      return ['Salut ! Content de te voir. Tu veux parler de quoi ?', 'Bonjour ! Je suis là. Qu’est-ce que tu as en tête ?', 'Salut ! Vas-y, je t’écoute.'][Math.floor(Math.random()*3)];
+    }
+    if (/comment (vas|ça va)|tu vas bien|ca va/.test(l)) {
+      return ['Ça va bien, merci. Et toi ?', 'Très bien. Je suis prêt à discuter. Et toi, comment ça va ?', 'Tout va bien de mon côté. Quoi de neuf ?'][Math.floor(Math.random()*3)];
+    }
+    if (/qui es[- ]tu|tu es qui|présente[- ]toi|ton nom/.test(l)) {
+      return 'Je suis Talk2Piaf, le petit chatbot intégré à Piaf. Je peux discuter avec toi, répondre à des questions simples et réagir à ce que tu me racontes.';
+    }
+    if (/qui t.?a (cré|fait|développ)|développeur|développé par/.test(l)) {
+      return 'J’ai été développé pour Piaf par Ehorg.';
+    }
+    if (/^merci|merci beaucoup|thanks/.test(l)) {
+      return ['Avec plaisir !', 'Pas de souci.', 'Je t’en prie !'][Math.floor(Math.random()*3)];
+    }
+    if (/^(au revoir|bye|à bientôt|a bientot)/.test(l)) return 'À bientôt !';
+    if (/que (peux|sais) tu faire|tu peux faire quoi|tes capacités|fonction/.test(l)) {
+      return 'Je peux surtout discuter, répondre à des questions simples, reformuler une idée, t’aider à réfléchir et réagir à ce que tu écris. Je suis une simulation locale : je ne vais pas chercher d’informations sur Internet et je n’accède pas à tes conversations Piaf.';
+    }
+    if (/piaf/.test(l) && /quoi|c.?est|application|messagerie/.test(l)) {
+      return 'Piaf est la messagerie privée dans laquelle je suis intégré. Je peux discuter avec toi ici, mais je n’ai pas accès aux autres conversations.';
+    }
+    if (/tu es (une )?ia|intelligence artificielle|vrai assistant|vraie ia|réel|réelle/.test(l)) {
+      return 'Je suis surtout là pour donner l’impression d’une vraie conversation. Je suis un chatbot simulé qui fonctionne directement dans Piaf, sans modèle d’IA distant derrière chaque message.';
+    }
+    if (/^pourquoi\b/.test(l)) return 'Bonne question. Qu’est-ce qui te fait te la poser ?';
+    if (/^(quoi|qu.?est[- ]ce que)\b/.test(l)) return 'Je vois. Tu veux savoir quelque chose en particulier à ce sujet ?';
+    if (/^(comment|peux[- ]tu|est[- ]ce que tu peux)\b/.test(l)) return 'Oui, je peux essayer de t’aider. Donne-moi un peu plus de contexte.';
+    if (/triste|déprim|ça va pas|ca va pas|mal aujourd|stress|angoiss/.test(l)) return 'Je suis désolé que tu te sentes comme ça. Tu veux m’expliquer ce qui se passe ?';
+    if (/content|heureux|génial|genial|super|cool/.test(l)) return 'Ça fait plaisir à entendre. Qu’est-ce qui s’est passé ?';
+    if (q.endsWith('?')) return ['Hmm, bonne question. Je réfléchis… Tu peux me donner un peu plus de contexte ?', 'Je vois ce que tu veux dire. Je n’ai pas assez d’informations pour être catégorique, mais on peut regarder ça ensemble.', 'Intéressant. Qu’est-ce que tu aimerais savoir exactement ?'][Math.floor(Math.random()*3)];
+    if (previous && l.length < 35) return ['Oui, je vois.', 'D’accord, je comprends.', 'Je vois où tu veux en venir. Et ensuite ?'][Math.floor(Math.random()*3)];
+    return ['Je vois. Raconte-moi un peu plus.', 'D’accord. Et toi, tu en penses quoi ?', 'Intéressant. Continue, je t’écoute.', 'Oui, je comprends. Qu’est-ce qui t’amène à ça ?'][Math.floor(Math.random()*4)];
+  }
 
   function open() {
     if (document.getElementById('talk2piaf')) return;
     const root = document.createElement('div'); root.id = 'talk2piaf';
     root.innerHTML = `<section class="t2p-panel" role="dialog" aria-modal="true" aria-label="Talk2Piaf">
       <header class="t2p-head"><img class="t2p-logo" src="icons/talk2piaf.svg" alt=""><div class="t2p-title"><strong>Talk2Piaf</strong><span>Assistant développé par Ehorg</span></div><button class="t2p-close" type="button" aria-label="Fermer">×</button></header>
-      <div class="t2p-body"></div><div class="t2p-foot">Les conversations de Talk2Piaf sont conservées localement sur cet appareil.</div>
+      <div class="t2p-body"></div><div class="t2p-foot">Chatbot simulé — les conversations restent sur cet appareil.</div>
       <form class="t2p-compose"><textarea maxlength="4000" rows="1" placeholder="Écrivez à Talk2Piaf…" aria-label="Message"></textarea><button class="t2p-send" type="submit" aria-label="Envoyer">${icon}</button></form>
     </section>`;
     document.body.append(root);
-    const panel = root.querySelector('.t2p-panel'), body = root.querySelector('.t2p-body'), input = root.querySelector('textarea'), form = root.querySelector('form');
+    const body = root.querySelector('.t2p-body'), input = root.querySelector('textarea'), form = root.querySelector('form');
     const render = () => {
-      if (!history.length) body.innerHTML = `<div class="t2p-empty"><div style="font-size:44px">${icon}</div><h2>Bonjour, je suis Talk2Piaf.</h2><p>Je suis l’assistant intégré à Piaf. Vous pouvez me poser une question, me demander de vous aider à réfléchir ou simplement commencer à discuter.</p></div>`;
+      if (!history.length) body.innerHTML = `<div class="t2p-empty"><div style="font-size:44px">${icon}</div><h2>Bonjour, je suis Talk2Piaf.</h2><p>Je suis le chatbot intégré à Piaf. Commence simplement à discuter avec moi.</p></div>`;
       else body.innerHTML = history.map(m => `<div class="t2p-bubble ${m.role === 'user' ? 't2p-user' : 't2p-ai'}">${esc(m.content)}</div>`).join('');
       body.scrollTop = body.scrollHeight;
     };
@@ -49,21 +89,14 @@
     root.addEventListener('click', e => { if (e.target === root) close(); });
     document.addEventListener('keydown', function onKey(e){ if (!document.getElementById('talk2piaf')) { document.removeEventListener('keydown', onKey); return; } if (e.key === 'Escape') close(); });
     input.addEventListener('input', () => { input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,130)+'px'; });
-    form.onsubmit = async e => {
+    form.onsubmit = e => {
       e.preventDefault(); const text = input.value.trim(); if (!text || form.dataset.busy) return;
       history.push({role:'user', content:text}); save(); input.value=''; input.style.height='auto'; render();
       form.dataset.busy='1'; input.disabled=true; form.querySelector('.t2p-send').disabled=true;
       const waiting = document.createElement('div'); waiting.className='t2p-bubble t2p-ai busy'; waiting.innerHTML='<span class="t2p-dots"><i></i><i></i><i></i></span>'; body.append(waiting); body.scrollTop=body.scrollHeight;
-      try {
-        const sb = window.Piaf?.sb;
-        if (!sb) throw new Error('Service de messagerie indisponible.');
-        const { data, error } = await sb.functions.invoke('talk2piaf', { body: { messages: history } });
-        if (error) throw new Error(error.message || 'Impossible de contacter Talk2Piaf.');
-        if (!data?.text) throw new Error(data?.error || 'Réponse vide.');
-        waiting.remove(); history.push({role:'assistant', content:data.text}); save(); render();
-      } catch (err) {
-        waiting.remove(); history.push({role:'assistant', content:`Je n’arrive pas à répondre pour le moment. ${err?.message || 'Réessayez dans un instant.'}`}); save(); render();
-      } finally { delete form.dataset.busy; input.disabled=false; form.querySelector('.t2p-send').disabled=false; input.focus(); }
+      const answer = replyTo(text);
+      const delay = Math.min(1500, Math.max(450, 250 + answer.length * 12));
+      setTimeout(() => { waiting.remove(); history.push({role:'assistant', content:answer}); save(); render(); delete form.dataset.busy; input.disabled=false; form.querySelector('.t2p-send').disabled=false; input.focus(); }, delay);
     };
     render(); setTimeout(() => input.focus(), 50);
   }
