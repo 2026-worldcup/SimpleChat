@@ -98,9 +98,9 @@ function avatarUrl(path) {
     .catch(() => { avatarUrls.delete(path); return null; }));
   return avatarUrls.get(path);
 }
-function avatar(name, size = 44, userId, pathOverride) {
+function avatar(name, size = 44, userId, pathOverride, square = false) {
   let hash = 0; for (const ch of name || '?') hash = (hash * 31 + ch.codePointAt(0)) >>> 0;
-  const el = h('span', { class: 'avatar', style: { width: size + 'px', height: size + 'px', fontSize: size * 0.42 + 'px', '--hue': String(hash % 360) }, 'aria-hidden': 'true' }, [...(name || '?')][0].toUpperCase());
+  const el = h('span', { class: 'avatar' + (square ? ' sq' : ''), style: { width: size + 'px', height: size + 'px', fontSize: size * 0.42 + 'px', '--hue': String(hash % 360) }, 'aria-hidden': 'true' }, [...(name || '?')][0].toUpperCase());
   const p = pathOverride || (userId && (S.me && userId === S.me.id ? S.me.avatar_path : S.avatars[userId]));
   if (p) avatarUrl(p).then((u) => { if (u) el.replaceChildren(h('img', { src: u, alt: '' })); });
   return el;
@@ -262,30 +262,65 @@ async function loadAvatars() {
   for (const r of rows) if ((S.avatars[r.id] || null) !== (r.avatar_path || null)) { S.avatars[r.id] = r.avatar_path; changed = true; }
   if (changed) bus.emit('convs');
 }
-// Change ou retire la photo de profil (recadrage carré au centre, 256 px, JPEG : les métadonnées de l'original ne sont jamais envoyées).
-async function uploadAvatar(folder, file) {
+// Cadrage de la photo : la personne déplace et zoome l'image dans un cadre carré, le résultat est un JPEG 256×256
+// (les métadonnées de l'original ne sont jamais envoyées). Renvoie le JPEG, ou null si la personne annule.
+Piaf.cropPhoto = async (file, round = true) => {
   if (!/^image\//.test(file.type)) throw new PiafError('bad_type');
   let bmp; try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { throw new PiafError('bad_image'); }
-  const s = Math.min(bmp.width, bmp.height), c = document.createElement('canvas'); c.width = c.height = 256;
-  c.getContext('2d').drawImage(bmp, (bmp.width - s) / 2, (bmp.height - s) / 2, s, s, 0, 0, 256, 256); bmp.close?.();
-  const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85)); if (!blob) throw new PiafError('bad_image');
+  const V = Math.max(200, Math.min(300, innerWidth - 80)), min = Math.min(bmp.width, bmp.height);
+  let zoom = 1, ox = 0, oy = 0; // ox, oy : décalage du centre de l'image par rapport au centre du cadre (en pixels du cadre)
+  const clamp = () => { const dw = bmp.width * V / min * zoom, dh = bmp.height * V / min * zoom;
+    ox = Math.max(-(dw - V) / 2, Math.min((dw - V) / 2, ox)); oy = Math.max(-(dh - V) / 2, Math.min((dh - V) / 2, oy)); };
+  const paint = (ctx, size) => { const k = size / V, sc = V / min * zoom * k, dw = bmp.width * sc, dh = bmp.height * sc;
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, size, size); ctx.drawImage(bmp, size / 2 + ox * k - dw / 2, size / 2 + oy * k - dh / 2, dw, dh); };
+  const cv = h('canvas', { class: 'crop-cv ' + (round ? 'round' : 'sq'), 'aria-label': 'Déplacez la photo pour la cadrer' });
+  const dpr = Math.min(2, devicePixelRatio || 1); cv.width = cv.height = Math.round(V * dpr); cv.style.width = cv.style.height = V + 'px';
+  const ctx = cv.getContext('2d');
+  const draw = () => { clamp(); ctx.setTransform(1, 0, 0, 1, 0, 0); paint(ctx, cv.width); };
+  const slider = h('input', { type: 'range', min: '1', max: '4', step: '0.01', value: '1', 'aria-label': 'Zoom', class: 'crop-zoom' });
+  const setZoom = (z) => { zoom = Math.max(1, Math.min(4, z)); slider.value = String(zoom); draw(); };
+  slider.addEventListener('input', () => setZoom(parseFloat(slider.value)));
+  cv.addEventListener('wheel', (e) => { e.preventDefault(); setZoom(zoom * (e.deltaY < 0 ? 1.08 : 1 / 1.08)); }, { passive: false });
+  const pts = new Map(); let pinch = 0;
+  const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  cv.addEventListener('pointerdown', (e) => { cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (pts.size === 2) pinch = dist(); });
+  cv.addEventListener('pointermove', (e) => { const p = pts.get(e.pointerId); if (!p) return;
+    if (pts.size === 1) { ox += e.clientX - p.x; oy += e.clientY - p.y; p.x = e.clientX; p.y = e.clientY; draw(); }
+    else { p.x = e.clientX; p.y = e.clientY; const d = dist(); if (pinch > 0) setZoom(zoom * d / pinch); pinch = d; } });
+  const up = (e) => { pts.delete(e.pointerId); pinch = 0; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  draw();
+  return new Promise((res) => {
+    let done = false; const fin = (v) => { if (!done) { done = true; bmp.close?.(); res(v); } };
+    const l = modal({ title: round ? 'Cadrer la photo' : 'Cadrer la photo du groupe',
+      body: [h('div', { class: 'crop-wrap' }, cv), h('label', { class: 'crop-zoom-row' }, h('span', { class: 'muted small' }, 'Zoom'), slider),
+        h('p', { class: 'muted small' }, 'Faites glisser la photo avec le doigt, et utilisez le curseur (ou pincez) pour zoomer.')],
+      actions: [{ label: 'Annuler', onClick: () => fin(null) },
+        { label: 'Valider', primary: true, onClick: async () => {
+          const c = document.createElement('canvas'); c.width = c.height = 256; paint(c.getContext('2d'), 256);
+          const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85)); if (!blob) { toast(errText(new PiafError('bad_image')), { error: true }); return false; }
+          fin(blob); } }] });
+    const orig = l.close; l.close = () => { fin(null); orig(); };
+  });
+};
+async function uploadAvatar(folder, blob) {
   const path = folder + '/' + uuid() + '.jpg';
   const up = await sb.storage.from('avatars').upload(path, blob, { contentType: 'image/jpeg' }); if (up.error) throw up.error;
   return path;
 }
-Piaf.setAvatar = async (file) => {
+Piaf.setAvatar = async (blob) => {
   const old = S.me.avatar_path;
-  if (!file) { await rpc('remove_avatar'); S.me.avatar_path = null; }
+  if (!blob) { await rpc('remove_avatar'); S.me.avatar_path = null; }
   else {
-    const path = await uploadAvatar(S.me.id, file);
+    const path = await uploadAvatar(S.me.id, blob);
     try { await rpc('set_avatar', { p_path: path }); } catch (e) { sb.storage.from('avatars').remove([path]).catch(() => {}); throw e; }
     S.me.avatar_path = path;
   }
   if (old) sb.storage.from('avatars').remove([old]).catch(() => {});
 };
-Piaf.setGroupAvatar = async (convId, file) => {
+Piaf.setGroupAvatar = async (convId, blob) => {
   const old = Piaf.conv(convId)?.avatar_path; let path = null;
-  if (file) path = await uploadAvatar(convId, file);
+  if (blob) path = await uploadAvatar(convId, blob);
   try { await rpc('group_set_avatar', { p_conv: convId, p_path: path }); } catch (e) { if (path) sb.storage.from('avatars').remove([path]).catch(() => {}); throw e; }
   if (old) sb.storage.from('avatars').remove([old]).catch(() => {});
   await Piaf.refreshConvs();

@@ -95,7 +95,7 @@ Piaf.views.group = (route) => {
   function photoMenu() {
     const pick = () => { const f = h('input', { type: 'file', accept: 'image/*', style: { display: 'none' }, onchange: async () => {
       const file = f.files[0]; f.remove(); if (!file) return;
-      try { toast('Envoi de la photo…'); await Piaf.setGroupAvatar(convId, file); toast('Photo du groupe mise à jour'); } catch (e) { toast(errText(e), { error: true }); } } });
+      try { const blob = await Piaf.cropPhoto(file, false); if (!blob) return; toast('Envoi de la photo…'); await Piaf.setGroupAvatar(convId, blob); toast('Photo du groupe mise à jour'); } catch (e) { toast(errText(e), { error: true }); } } });
       document.body.append(f); f.click(); };
     sheet('Photo du groupe', [{ icon: 'camera', label: 'Choisir une photo', onClick: pick },
       conv()?.avatar_path ? { icon: 'trash', label: 'Supprimer la photo', danger: true, onClick: async () => { try { await Piaf.setGroupAvatar(convId, null); toast('Photo supprimée'); } catch (e) { toast(errText(e), { error: true }); } } } : null]);
@@ -143,8 +143,8 @@ Piaf.views.group = (route) => {
     const full = rows.length >= maxMembers();
     body.replaceChildren(
       h('section', { class: 'card group-head' },
-        admin() ? h('button', { class: 'avatar-edit', type: 'button', 'aria-label': 'Modifier la photo du groupe', onclick: photoMenu }, avatar(c.other_name, 88, null, c.avatar_path), h('span', { class: 'avatar-badge' }, icon('camera', 14)))
-          : avatar(c.other_name, 88, null, c.avatar_path),
+        admin() ? h('button', { class: 'avatar-edit sq', type: 'button', 'aria-label': 'Modifier la photo du groupe', onclick: photoMenu }, avatar(c.other_name, 88, null, c.avatar_path, true), h('span', { class: 'avatar-badge' }, icon('camera', 14)))
+          : avatar(c.other_name, 88, null, c.avatar_path, true),
         h('strong', { class: 'big' }, c.other_name), h('span', { class: 'muted' }, `Groupe · ${rows.length} membre${rows.length > 1 ? 's' : ''}`),
         admin() ? h('button', { class: 'btn', type: 'button', onclick: rename }, icon('edit', 18), ' Renommer le groupe') : null),
       h('section', { class: 'card' },

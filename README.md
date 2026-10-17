@@ -15,7 +15,7 @@ Le code de l'application, le schéma SQL, les politiques de sécurité et les Ed
 - Statuts : en cours, envoyé, distribué, lu (avec heure), échec + réessai ; confirmations de lecture désactivables (réciproque).
 - Photos et vidéos : envoi groupé avec aperçu, progression, annulation, visionneuse, téléchargement, galerie avec quota, suppression pour moi / pour tous (suppression réelle du fichier).
 - Photo de profil (recadrée en carré 256 px côté appareil, JPEG, bucket privé visible seulement par soi et ses contacts de conversation) ; supprimée avec le compte.
-- Groupes (2 à 32 personnes) : création depuis ses discussions et groupes communs, rôles administrateur/membre, ajout/retrait, départ, photo et nom du groupe, historique masqué aux nouveaux arrivants, accusés « lu par N/M », suppression par un administrateur, quota de médias par groupe. **Testés côté base de données ; interface et fonctions serveur non testées de bout en bout.**
+- Groupes (2 à 32 personnes) : création depuis ses discussions et groupes communs, rôles administrateur/membre, ajout/retrait, départ, photo carrée et nom du groupe, cadrage des photos (déplacer + zoomer), historique masqué aux nouveaux arrivants, accusés « lu par N/M », suppression par un administrateur, quota de médias par groupe. **Testés côté base de données ; interface et fonctions serveur non testées de bout en bout.**
 - Blocage, signalement, thème clair/sombre, notifications locales (application ouverte ou en arrière-plan).
 
 ### Non terminé / limites connues

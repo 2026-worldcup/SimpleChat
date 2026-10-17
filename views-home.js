@@ -120,7 +120,7 @@ Piaf.views.home = () => {
     }
     list.replaceChildren(...rows.map((c) => h('div', { class: 'conv' + (c.unread ? ' unread' : ''), role: 'listitem' },
       h('button', { class: 'conv-open', type: 'button', onclick: () => Piaf.go(c.assistant ? '#/talk2piaf' : '#/c/' + c.conversation_id), 'aria-label': `${Piaf.convName(c)}${c.unread ? `, ${c.unread} non lus` : ''}` },
-        c.assistant ? Piaf.assistantAvatar(44) : avatar(Piaf.convName(c), 44, c.other_id, c.avatar_path),
+        c.assistant ? Piaf.assistantAvatar(44) : avatar(Piaf.convName(c), 44, c.other_id, c.avatar_path, c.kind === 'group'),
         h('span', { class: 'conv-main' },
           h('span', { class: 'conv-top' }, h('span', { class: 'conv-name' }, Piaf.convName(c), c.assistant ? h('span', { class: 'tag' }, 'Assistant') : null), h('span', { class: 'conv-time' }, fmt.listTime(c.last_at))),
           h('span', { class: 'conv-bot' }, h('span', { class: 'conv-prev' }, preview(c)),
@@ -182,7 +182,7 @@ Piaf.views.settings = () => {
   function photoMenu() {
     const pick = () => { const f = h('input', { type: 'file', accept: 'image/*', style: { display: 'none' }, onchange: async () => {
       const file = f.files[0]; f.remove(); if (!file) return;
-      try { toast('Envoi de la photo…'); await Piaf.setAvatar(file); toast('Photo mise à jour'); draw(); } catch (e) { toast(errText(e), { error: true }); } } });
+      try { const blob = await Piaf.cropPhoto(file, true); if (!blob) return; toast('Envoi de la photo…'); await Piaf.setAvatar(blob); toast('Photo mise à jour'); draw(); } catch (e) { toast(errText(e), { error: true }); } } });
       document.body.append(f); f.click(); };
     sheet('Photo de profil', [{ icon: 'camera', label: 'Choisir une photo', onClick: pick },
       S.me.avatar_path ? { icon: 'trash', label: 'Supprimer la photo', danger: true, onClick: async () => { try { await Piaf.setAvatar(null); toast('Photo supprimée'); draw(); } catch (e) { toast(errText(e), { error: true }); } } } : null]);

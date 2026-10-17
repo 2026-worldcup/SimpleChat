@@ -128,7 +128,7 @@ Piaf.views.chat = (route) => {
 
   // ------------------------------------------------ en-tête / blocage
   function drawHeader() {
-    headTitle.replaceChildren(avatar(name(), 38, conv && conv.other_id, conv && conv.avatar_path), h('span', { class: 'chat-title-text' }, h('strong', null, name()),
+    headTitle.replaceChildren(avatar(name(), 38, conv && conv.other_id, conv && conv.avatar_path, !!conv && conv.kind === 'group'), h('span', { class: 'chat-title-text' }, h('strong', null, name()),
       h('span', { class: 'muted small' }, conv ? (isGroup() ? conv.members + ' membres' : conv.blocked_by_me ? 'Contact bloqué' : 'Identifiant ' + fmt.id8(conv.other_public_id)) : '…')));
     const blocked = conv?.blocked_by_me;
     composer.classList.toggle('blocked', !!blocked);
