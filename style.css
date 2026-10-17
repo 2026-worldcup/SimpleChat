@@ -159,3 +159,10 @@ input[type=text], input[type=password], input[type=search], input:not([type]), t
 .crop-cv { display: block; background: var(--surface2); touch-action: none; cursor: grab; box-shadow: 0 0 0 3px var(--accent, #c2410c); }
 .crop-cv.round { border-radius: 50%; } .crop-cv.sq { border-radius: 16%; }
 .crop-zoom-row { display: flex; align-items: center; gap: 12px; margin: 4px 4px 8px; } .crop-zoom { flex: 1; min-height: 36px; accent-color: var(--accent, #c2410c); }
+
+/* mentions et réponses locales de Talk2Piaf */
+.mention { font-weight: 700; border-radius: 5px; padding: 0 2px; background: color-mix(in srgb, currentColor 13%, transparent); } .mention.me { background: color-mix(in srgb, var(--accent, #c2410c) 28%, transparent); } .mention.t2p { color: var(--accent, #c2410c); }
+.mention-pop { display: flex; flex-direction: column; max-height: 232px; overflow-y: auto; padding: 4px 6px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.mention-item { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 8px; border: 0; background: transparent; border-radius: 10px; text-align: left; color: inherit; } .mention-item.on, .mention-item:active { background: var(--surface2); }
+.mention-name { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bubble.whisper { border-style: dashed; } .t2p-name { color: var(--accent, #c2410c); }

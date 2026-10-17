@@ -142,7 +142,7 @@
     },
     async photo() {
       const file = await pickFile('image/*'); if (!file) return { say: 'Aucune photo choisie.', nodone: true };
-      try { await P.setAvatar(file); } catch (e) { throw new Error(errText(e)); } return { say: 'Votre photo de profil est mise à jour.' };
+      try { const blob = await P.cropPhoto(file, true); if (!blob) return { say: 'D’accord, votre photo reste inchangée.', nodone: true }; await P.setAvatar(blob); } catch (e) { throw new Error(errText(e)); } return { say: 'Votre photo de profil est mise à jour.' };
     },
     async rmphoto() { if (!S.me.avatar_path) return { say: 'Vous n’avez pas de photo de profil.' }; try { await P.setAvatar(null); } catch (e) { throw new Error(errText(e)); } return { say: 'Votre photo de profil est supprimée.' }; },
     async receipts(p) { try { await saveSetting({ read_receipts: !!p.v }); } catch (e) { throw new Error(errText(e)); } return { say: p.v ? 'Confirmations de lecture activées.' : 'Confirmations de lecture désactivées (réciproque : vous ne voyez plus celles des autres).' }; },
@@ -174,6 +174,28 @@
     return out;
   }
   const sameGroup = (a, b) => a && b && a.role === b.role && fmt.dayKey(a.at) === fmt.dayKey(b.at) && Math.abs(new Date(b.at) - new Date(a.at)) < 300000;
+
+  // ---------------------------------------------------------------- @talk2piaf dans les autres discussions (réponse locale, visible par la personne qui l'appelle)
+  P.assistantAsk = (q) => {
+    let r; try { r = KB.reply(q, context(), mem); } catch (e) { console.error(e); r = null; }
+    if (!r) r = { text: 'Je n’ai pas réussi à traiter ce message. Pouvez-vous le reformuler ?', chips: KB.starters().slice(0, 4), links: [], acts: [] };
+    if (r.topic !== undefined) mem.topic = r.unknown ? null : (r.topic || mem.topic);
+    mem.offer = (r.acts && r.acts[0]) || null;
+    return { text: r.text, links: r.links || [], acts: (r.acts || []).map((a) => ({ l: a.l, a: a.a, p: a.p || {} })), chips: r.chips || [] };
+  };
+  P.assistantRun = async (act) => { const fn = ACTIONS[act.a]; return fn ? fn(act.p || {}) : null; };
+  P.assistantBubble = (r, o) => {
+    const extras = [];
+    const links = (r.links || []).map((l) => { const u = safeUrl(l.u); return u ? h('a', { class: 't2p-link', href: u, target: '_blank', rel: 'noopener noreferrer nofollow' }, l.l) : null; }).filter(Boolean);
+    if (links.length) extras.push(h('div', { class: 't2p-links' }, links));
+    if (r.acts && r.acts.length) extras.push(h('div', { class: 't2p-acts' }, r.acts.map((a, j) => h('button', { type: 'button', class: 't2p-act' + (a.done ? ' done' : ''), disabled: !!a.done, onclick: (e) => o.onAct(j, e.currentTarget) }, a.l))));
+    if (o.showChips && r.chips && r.chips.length) extras.push(h('div', { class: 't2p-chips' }, r.chips.map((c) => h('button', { type: 'button', class: 't2p-chip', onclick: () => o.onChip(c.t) }, c.l))));
+    const bubble = h('div', { class: 'bubble first last whisper', tabindex: '0', role: 'button', 'aria-haspopup': 'dialog', 'aria-label': 'Réponse de Talk2Piaf',
+      onclick: () => o.onMenu(), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); o.onMenu(); } } },
+      h('div', { class: 'sender t2p-name' }, NAME), h('div', { class: 'text' }, inline(r.text)),
+      h('div', { class: 'meta' }, h('time', { datetime: o.time }, fmt.time(o.time)), h('span', null, ' · visible par vous seul')));
+    return h('div', { class: 'msg gap', role: 'listitem' }, bubble, extras.length ? h('div', { class: 't2p-extras' }, extras) : null);
+  };
 
   P.views.assistant = () => {
     const s = state();

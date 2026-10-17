@@ -5,6 +5,9 @@ const { h, icon, iconBtn, S, bus, api, fmt, avatar, toast, sheet, modal, confirm
 const CFG = window.PIAF_CONFIG;
 const me = () => S.me.id;
 const PAGE = 40;
+const whispers = new Map(); // réponses locales de Talk2Piaf par discussion : jamais envoyées, perdues à la fermeture de l'application
+const T2P_RE = /(^|\s)@talk2piaf(?![\p{L}\p{N}_])/iu, T2P_RE_G = /(^|\s)@talk2piaf(?![\p{L}\p{N}_])/giu;
+Piaf.mentionsMe = (body) => { const n = S.me && S.me.display_name; return !!(n && body && new RegExp('(^|\\s)@' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\p{L}\\p{N}_])', 'iu').test(body)); };
 const COLS = 'id,conversation_id,sender_id,client_id,kind,body,reply_to,forwarded,created_at,edited_at,deleted_at,pinned_at,delivered_at,read_at';
 const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 const MIME_BY_EXT = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', heic: 'image/heic', heif: 'image/heif', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime' };
@@ -117,11 +120,13 @@ Piaf.views.chat = (route) => {
   const header = h('header', { class: 'topbar chat-top' }, iconBtn('back', 'Retour aux discussions', () => Piaf.back('#/')), headTitle,
     iconBtn('search', 'Rechercher dans la conversation', () => openSearch()), iconBtn('dots', 'Menu de la discussion', () => chatMenu()));
   const trayEl = h('div', { class: 'tray', hidden: true }), uploadsEl = h('div', { class: 'uploads', hidden: true }), replyBar = h('div', { class: 'replybar', hidden: true });
-  const ta = h('textarea', { rows: '1', placeholder: 'Message', 'aria-label': 'Écrire un message', maxlength: '4000', enterkeyhint: 'enter', oninput: onInput, onkeydown: (e) => {
+  const mentionPop = h('div', { class: 'mention-pop', role: 'listbox', 'aria-label': 'Personnes à mentionner', hidden: true });
+  const ta = h('textarea', { rows: '1', placeholder: 'Message', 'aria-label': 'Écrire un message', maxlength: '4000', enterkeyhint: 'enter', oninput: onInput, onclick: () => updateMentions(), onkeyup: (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') updateMentions(); }, onkeydown: (e) => {
+    if (mentionKey(e)) return;
     if (e.key === 'Enter' && !e.shiftKey && matchMedia('(pointer:fine)').matches) { e.preventDefault(); sendText(); } } });
   const fileInput = h('input', { type: 'file', multiple: true, accept: 'image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,video/mp4,video/webm,video/quicktime', hidden: true, onchange: () => { addFiles([...fileInput.files]); fileInput.value = ''; } });
   const sendBtn = h('button', { class: 'send', type: 'button', 'aria-label': 'Envoyer', onclick: sendText }, icon('send', 22));
-  const composer = h('div', { class: 'composer' }, replyBar, trayEl, uploadsEl,
+  const composer = h('div', { class: 'composer' }, mentionPop, replyBar, trayEl, uploadsEl,
     h('div', { class: 'composer-row' }, iconBtn('clip', 'Joindre des photos ou vidéos', () => fileInput.click()), ta, sendBtn, fileInput));
   const searchPanel = h('div', { class: 'searchpanel', hidden: true });
   const el = h('div', { class: 'screen chat' }, header, banner, searchPanel, h('div', { class: 'msgs-wrap' }, scroller, pill), composer);
@@ -166,7 +171,13 @@ Piaf.views.chat = (route) => {
   }
   const visible = () => {
     const outs = outStore.list().filter((i) => i.conv === convId && !clientIds.has(i.client_id)).map((i) => ({ id: 'local:' + i.client_id, client_id: i.client_id, sender_id: me(), kind: 'text', body: i.body, reply_to: i.reply_to, forwarded: i.forwarded, created_at: i.at, _out: i }));
-    return [...msgs.values(), ...outs].sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : a.id < b.id ? -1 : 1));
+    const out = [...msgs.values(), ...outs].sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : a.id < b.id ? -1 : 1));
+    for (const w of whisperList()) { // réponse de l'assistant : juste après le message qui l'a provoquée
+      const i = out.findIndex((x) => x.client_id === w.after || x.id === w.after);
+      if (i >= 0) { let k = i + 1; while (k < out.length && out[k].kind === 't2p' && out[k].after === w.after) k++; out.splice(k, 0, { ...w, created_at: out[i].created_at }); }
+      else out.push({ ...w, created_at: w.at });
+    }
+    return out;
   };
   async function loadOlder() {
     if (loading || !hasMore) return; loading = true;
@@ -201,15 +212,15 @@ Piaf.views.chat = (route) => {
       try { await api.rpc('mark_read', { p_conv: convId }); Piaf.refreshConvs(); } catch { /* */ }
     }, 400);
   }
-  const sameGroup = (a, b) => a && b && a.kind !== 'system' && b.kind !== 'system' && a.sender_id === b.sender_id && fmt.dayKey(a.created_at) === fmt.dayKey(b.created_at) && Math.abs(new Date(b.created_at) - new Date(a.created_at)) < 300000;
+  const sameGroup = (a, b) => a && b && a.kind !== 'system' && b.kind !== 'system' && a.kind !== 't2p' && b.kind !== 't2p' && a.sender_id === b.sender_id && fmt.dayKey(a.created_at) === fmt.dayKey(b.created_at) && Math.abs(new Date(b.created_at) - new Date(a.created_at)) < 300000;
   function render() {
     const all = visible(), frag = [];
     all.forEach((m, i) => {
       const prev = all[i - 1], next = all[i + 1];
       if (!prev || fmt.dayKey(prev.created_at) !== fmt.dayKey(m.created_at)) frag.push(h('div', { class: 'day', role: 'separator' }, h('span', null, fmt.dayLabel(m.created_at))));
       const first = !sameGroup(prev, m), last = !sameGroup(m, next);
-      const sig = JSON.stringify([m.body, m.edited_at, m.deleted_at, m.pinned_at, m.delivered_at, m.read_at, m._out && [m._out.status, m._out.err], first, last, reactions.get(m.id), mediaOf.get(m.id)?.id, replySig(m), S.settings.read_receipts, name(), isGroup() && membersVer, m.kind]);
-      let n = nodes.get(m.id); if (!n || n._sig !== sig) { n = buildMsg(m, first, last); n._sig = sig; nodes.set(m.id, n); }
+      const sig = JSON.stringify([m.body, m.edited_at, m.deleted_at, m.pinned_at, m.read_at, m._out && [m._out.status, m._out.err], first, last, reactions.get(m.id), mediaOf.get(m.id)?.id, replySig(m), S.settings.read_receipts, name(), isGroup() && membersVer, m.kind, m.r && [m.r.text, m.r.acts.map((a) => !!a.done), i === all.length - 1]]);
+      let n = nodes.get(m.id); if (!n || n._sig !== sig) { n = buildMsg(m, first, last, i === all.length - 1); n._sig = sig; nodes.set(m.id, n); }
       frag.push(n);
     });
     if (!all.length && !hasMore) frag.push(h('div', { class: 'empty small' }, icon('bubble', 36), h('p', { class: 'muted' }, 'Aucun message. Dites bonjour !')));
@@ -221,18 +232,16 @@ Piaf.views.chat = (route) => {
     if (isGroup() && members.size && !m._out) {
       const others = [...members.values()].filter((x) => !x.is_me && x.joined_at <= m.created_at), t = others.length;
       const rd = others.filter((x) => x.last_read_at && x.last_read_at >= m.created_at).length;
-      const dl = others.filter((x) => (x.last_delivered_at && x.last_delivered_at >= m.created_at) || (x.last_read_at && x.last_read_at >= m.created_at)).length;
       if (t && rd === t) return h('span', { class: 'st read', title: 'Lu par tous' }, icon('check2', 16));
       if (rd) return h('span', { class: 'st read part', title: `Lu par ${rd} sur ${t}` }, icon('check2', 16), h('small', null, `${rd}/${t}`));
-      if (dl) return h('span', { class: 'st', title: `Distribué à ${dl} sur ${t}` }, icon('check2', 16));
-      return h('span', { class: 'st', title: 'Envoyé' }, icon('check', 15));
+      return h('span', { class: 'st', title: 'Arrivé sur le serveur' }, icon('check2', 16));
     }
-    if (m._out) return m._out.status === 'failed' ? h('span', { class: 'st fail', title: 'Échec de l’envoi' }, icon('alert', 15)) : h('span', { class: 'st', title: 'Envoi en cours' }, icon('clock', 14));
+    if (m._out) return m._out.status === 'failed' ? h('span', { class: 'st fail', title: 'Échec de l’envoi' }, icon('alert', 15)) : h('span', { class: 'st', title: 'Envoi en cours' }, icon('check', 15));
     if (m.read_at && S.settings.read_receipts) return h('span', { class: 'st read', title: 'Lu à ' + fmt.time(m.read_at) }, icon('check2', 16));
-    if (m.delivered_at) return h('span', { class: 'st', title: 'Distribué' }, icon('check2', 16));
-    return h('span', { class: 'st', title: 'Envoyé' }, icon('check', 15));
+    return h('span', { class: 'st', title: 'Arrivé sur le serveur' }, icon('check2', 16));
   }
-  function buildMsg(m, first, last) {
+  function buildMsg(m, first, last, isLast) {
+    if (m.kind === 't2p') return Piaf.assistantBubble(m.r, { time: m.at, showChips: isLast, onAct: (j, btn) => runWhisperAct(m, j, btn), onChip: (t) => askAssistant(t, m.id), onMenu: () => whisperMenu(m) });
     if (m.kind === 'system') return h('div', { class: 'sysmsg', role: 'listitem', 'data-id': m.id }, h('span', null, m.body));
     const mine = m.sender_id === me(), del = !!m.deleted_at, parts = [];
     if (isGroup() && !mine && first && !del) parts.push(h('div', { class: 'sender', style: { color: `hsl(${hueOf(m.sender_id)} 60% 52%)` } }, senderName(m.sender_id)));
@@ -243,7 +252,7 @@ Piaf.views.chat = (route) => {
     }
     if (del) parts.push(h('div', { class: 'text tomb' }, m.kind === 'media' ? 'Ce média a été supprimé' : 'Ce message a été supprimé'));
     else if (m.kind === 'media') parts.push(mediaBlock(m));
-    else parts.push(h('div', { class: 'text' }, linkify(m.body || '')));
+    else parts.push(h('div', { class: 'text' }, richText(m.body || '')));
     if (m.kind === 'media' && !del && mediaOf.get(m.id)) { const d = mediaOf.get(m.id); parts.push(h('div', { class: 'cap' }, `${d.name} · ${fmt.size(d.size_bytes)}`)); }
     parts.push(h('div', { class: 'meta' }, m.pinned_at && !del ? icon('pin', 12) : null, m.edited_at && !del ? h('span', null, 'modifié') : null, h('time', { datetime: m.created_at }, fmt.time(m.created_at)), mine ? statusIcon(m) : null));
     const bubble = h('div', { class: 'bubble' + (mine ? ' mine' : '') + (first ? ' first' : '') + (last ? ' last' : ''), tabindex: '0', role: 'button', 'aria-haspopup': 'dialog', 'aria-label': 'Actions du message', onclick: () => openActions(m),
@@ -331,7 +340,7 @@ Piaf.views.chat = (route) => {
   }
   function autosize() { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; }
   let draftTimer = null;
-  function onInput() { autosize(); clearTimeout(draftTimer); draftTimer = setTimeout(() => { if (!editing) { if (ta.value) store.set(draftKey, ta.value); else store.del(draftKey); } }, 300); }
+  function onInput() { autosize(); updateMentions(); clearTimeout(draftTimer); draftTimer = setTimeout(() => { if (!editing) { if (ta.value) store.set(draftKey, ta.value); else store.del(draftKey); } }, 300); }
   async function sendText() {
     const body = ta.value.trim(); if (!body || conv?.blocked_by_me) return;
     if (editing) {
@@ -341,7 +350,80 @@ Piaf.views.chat = (route) => {
     }
     const rid = replyTo && !String(replyTo.id).startsWith('local:') ? replyTo.id : null;
     ta.value = ''; autosize(); store.del(draftKey); replyTo = null; drawReplyBar();
-    const p = Piaf.queueMessage(convId, body, { reply_to: rid }); render(); scrollBottom(); await p; Piaf.refreshConvs();
+    const p = Piaf.queueMessage(convId, body, { reply_to: rid }); const cid = outStore.list().slice(-1)[0]?.client_id;
+    render(); scrollBottom();
+    if (T2P_RE.test(body)) askAssistant(body.replace(T2P_RE_G, ' ').replace(/\s+/g, ' ').trim() || 'Que peux-tu faire ?', cid);
+    await p; Piaf.refreshConvs();
+  }
+
+  // ------------------------------------------------ mentions (@nom) et appel de l'assistant (@talk2piaf)
+  const norm = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let mRe = null, mReKey = '';
+  function mentionRe() { // les noms connus (membres du groupe, moi, Talk2Piaf), du plus long au plus court : les noms avec espaces fonctionnent
+    const names = [...new Set([...(isGroup() ? [...members.values()].map((x) => x.display_name) : []), S.me.display_name, 'Talk2Piaf'].filter(Boolean))].sort((a, b) => b.length - a.length);
+    const k = names.join('\u0000'); if (k !== mReKey) { mReKey = k; mRe = new RegExp('(^|[\\s(«"\'])@(' + names.map(reEsc).join('|') + ')(?![\\p{L}\\p{N}_])', 'giu'); }
+    mRe.lastIndex = 0; return mRe;
+  }
+  function richText(body) {
+    const re = mentionRe(), out = []; let last = 0, m;
+    while ((m = re.exec(body))) {
+      const s = m.index + m[1].length, tag = m[2];
+      if (s > last) out.push(...linkify(body.slice(last, s)));
+      const cls = 'mention' + (norm(tag) === norm(S.me.display_name) ? ' me' : '') + (norm(tag) === 'talk2piaf' ? ' t2p' : '');
+      out.push(h('span', { class: cls }, '@' + tag)); last = s + 1 + tag.length;
+    }
+    if (last < body.length) out.push(...linkify(body.slice(last)));
+    return out;
+  }
+  let pop = { items: [], idx: 0, start: 0 };
+  function updateMentions() {
+    const caret = ta.selectionStart ?? ta.value.length, m = /(^|\s)@([^\s@]{0,30})$/u.exec(ta.value.slice(0, caret));
+    if (!m || editing) { mentionPop.hidden = true; pop.items = []; return; }
+    const q = norm(m[2]), cands = [...(isGroup() ? [...members.values()].filter((x) => !x.is_me).map((x) => ({ name: x.display_name, id: x.user_id })) : []), { name: 'Talk2Piaf', t2p: true }];
+    pop = { items: cands.filter((c) => norm(c.name).split(/\s+/).some((w) => w.startsWith(q))).slice(0, 6), idx: 0, start: caret - m[2].length - 1 };
+    drawMentions();
+  }
+  function drawMentions() {
+    if (!pop.items.length) { mentionPop.hidden = true; return; }
+    mentionPop.hidden = false;
+    mentionPop.replaceChildren(...pop.items.map((c, i) => h('button', { type: 'button', role: 'option', class: 'mention-item' + (i === pop.idx ? ' on' : ''), 'aria-selected': String(i === pop.idx),
+      onpointerdown: (e) => { e.preventDefault(); pickMention(c); } },
+      c.t2p ? Piaf.assistantAvatar(30) : avatar(c.name, 30, c.id), h('span', { class: 'mention-name' }, c.name), c.t2p ? h('span', { class: 'muted small' }, 'Assistant de Piaf') : null)));
+  }
+  function pickMention(c) {
+    const caret = ta.selectionStart ?? ta.value.length, ins = '@' + c.name + ' ';
+    ta.value = ta.value.slice(0, pop.start) + ins + ta.value.slice(caret); const pos = pop.start + ins.length;
+    ta.setSelectionRange(pos, pos); mentionPop.hidden = true; pop.items = []; autosize(); onInput(); ta.focus({ preventScroll: true });
+  }
+  function mentionKey(e) {
+    if (mentionPop.hidden || !pop.items.length) return false;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); pop.idx = (pop.idx + (e.key === 'ArrowDown' ? 1 : pop.items.length - 1)) % pop.items.length; drawMentions(); return true; }
+    if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(pop.items[pop.idx]); return true; }
+    if (e.key === 'Escape') { e.preventDefault(); mentionPop.hidden = true; pop.items = []; return true; }
+    return false;
+  }
+  const whisperList = () => whispers.get(convId) || [];
+  function addWhisper(r, after) {
+    const list_ = whispers.get(convId) || []; list_.push({ id: 't2p:' + uuid(), kind: 't2p', sender_id: 't2p', after, at: new Date().toISOString(), r }); whispers.set(convId, list_.slice(-30));
+    render(); scrollBottom();
+  }
+  function askAssistant(q, after) {
+    if (!Piaf.assistantAsk) return;
+    setTimeout(() => { if (!destroyed) addWhisper(Piaf.assistantAsk(q), after); }, 450);
+  }
+  async function runWhisperAct(w, j, btn) {
+    const act = w.r.acts[j]; if (!act || act.done) return; btn.disabled = true;
+    try {
+      const r = await Piaf.assistantRun(act); if (destroyed) return;
+      if (!(r && r.nodone)) act.done = true; else btn.disabled = false;
+      if (r && r.clear) { toast('Historique de Talk2Piaf effacé'); render(); return; }
+      if (r && r.say) addWhisper({ text: r.say, links: [], chips: [], acts: (r.acts || []).map((a) => ({ l: a.l, a: a.a, p: a.p || {} })) }, w.id); else render();
+    } catch (e) { if (destroyed) return; btn.disabled = false; addWhisper({ text: '⚠️ ' + (e && e.message ? e.message : 'L’action n’a pas pu aboutir. Réessayez.'), links: [], chips: [], acts: [] }, w.id); }
+  }
+  function whisperMenu(w) {
+    sheet(null, [{ icon: 'copy', label: 'Copier', onClick: () => copyText(w.r.text.replace(/\*\*(.+?)\*\*/gs, '$1')) }, { sep: true },
+      { icon: 'eye', label: 'Masquer cette réponse', danger: true, onClick: () => { whispers.set(convId, whisperList().filter((x) => x.id !== w.id)); render(); } }]);
   }
 
   // ------------------------------------------------ médias : sélection, aperçu, envoi avec progression

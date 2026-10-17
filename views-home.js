@@ -244,10 +244,10 @@ bus.on('msg', async (p) => {
   const row = p.new; if (!S.me || p.eventType !== 'INSERT' || !row || row.sender_id === S.me.id) { Piaf.refreshConvs?.(); return; }
   clearTimeout(deliverTimer); deliverTimer = setTimeout(() => api.rpc('mark_delivered_all').catch(() => {}), 400);
   try { await Piaf.refreshConvs(); } catch { return; }
-  const c = Piaf.conv(row.conversation_id); if (!c || c.muted || row.deleted_at) return;
+  const c = Piaf.conv(row.conversation_id); const mentioned = !!c && c.kind === 'group' && Piaf.mentionsMe?.(row.body); if (!c || (c.muted && !mentioned) || row.deleted_at) return;
   const viewing = !document.hidden && S.route.name === 'chat' && S.route.id === row.conversation_id;
   if (viewing) return;
-  Piaf.notify(Piaf.convName(c), row.kind === 'media' ? '📎 Média' : (row.body || 'Nouveau message'), '#/c/' + row.conversation_id, row.conversation_id);
+  Piaf.notify(Piaf.convName(c), row.kind === 'media' ? '📎 Média' : ((mentioned ? '@ Vous êtes mentionné·e : ' : '') + (row.body || 'Nouveau message')), '#/c/' + row.conversation_id, row.conversation_id);
 });
 bus.on('conv', () => Piaf.refreshConvs?.());
 bus.on('member', () => Piaf.refreshConvs?.());
