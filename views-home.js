@@ -102,7 +102,7 @@ Piaf.views.home = () => {
     return (c.last_sender === myId() ? 'Vous : ' : c.kind === 'group' && c.last_sender_name ? c.last_sender_name + ' : ' : '') + (c.last_kind === 'media' ? '📎 Média' : c.last_body);
   }
   function drawList() {
-    const all = S.convs;
+    const all = Piaf.withAssistant ? Piaf.withAssistant(S.convs) : S.convs;   // Talk2Piaf figure dans la liste comme une discussion
     const unreadOf = (arr) => arr.reduce((n, c) => n + (c.unread || 0), 0);
     const inbox = all.filter((c) => !c.archived), fav = all.filter((c) => c.favorite && !c.archived), arch = all.filter((c) => c.archived);
     tabsEl.replaceChildren(...[['chats', 'Discussions', unreadOf(inbox)], ['fav', 'Favoris', 0], ['arch', 'Archivées', 0]].map(([k, l, n]) =>
@@ -119,10 +119,10 @@ Piaf.views.home = () => {
         tab === 'chats' && !filter ? h('button', { class: 'btn primary', onclick: () => Piaf.go('#/new') }, 'Démarrer une discussion') : null)); return;
     }
     list.replaceChildren(...rows.map((c) => h('div', { class: 'conv' + (c.unread ? ' unread' : ''), role: 'listitem' },
-      h('button', { class: 'conv-open', type: 'button', onclick: () => Piaf.go('#/c/' + c.conversation_id), 'aria-label': `${Piaf.convName(c)}${c.unread ? `, ${c.unread} non lus` : ''}` },
-        avatar(Piaf.convName(c), 44, c.other_id, c.avatar_path),
+      h('button', { class: 'conv-open', type: 'button', onclick: () => Piaf.go(c.assistant ? '#/talk2piaf' : '#/c/' + c.conversation_id), 'aria-label': `${Piaf.convName(c)}${c.unread ? `, ${c.unread} non lus` : ''}` },
+        c.assistant ? Piaf.assistantAvatar(44) : avatar(Piaf.convName(c), 44, c.other_id, c.avatar_path),
         h('span', { class: 'conv-main' },
-          h('span', { class: 'conv-top' }, h('span', { class: 'conv-name' }, Piaf.convName(c)), h('span', { class: 'conv-time' }, fmt.listTime(c.last_at))),
+          h('span', { class: 'conv-top' }, h('span', { class: 'conv-name' }, Piaf.convName(c), c.assistant ? h('span', { class: 'tag' }, 'Assistant') : null), h('span', { class: 'conv-time' }, fmt.listTime(c.last_at))),
           h('span', { class: 'conv-bot' }, h('span', { class: 'conv-prev' }, preview(c)),
             c.muted ? icon('mute', 16) : null, c.favorite ? icon('star', 16) : null,
             c.unread ? h('span', { class: 'badge' }, c.unread > 99 ? '99+' : c.unread) : null))),

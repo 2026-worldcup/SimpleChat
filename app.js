@@ -380,6 +380,7 @@ function parseRoute() {
   if (p[0] === 'g' && uuidRe.test(p[1] || '')) return p[2] === 'add' ? { name: 'groupadd', id: p[1] } : { name: 'group', id: p[1] };
   if (p[0] === 'new') return { name: 'new' };
   if (p[0] === 'settings') return { name: 'settings' };
+  if (p[0] === 'talk2piaf') return { name: 'assistant' };
   return { name: 'home' };
 }
 Piaf.go = (hash) => { if (location.hash === hash) render(); else location.hash = hash; };

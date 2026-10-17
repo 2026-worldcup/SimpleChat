@@ -1,75 +1,79 @@
-/* Talk2Piaf — assistant intégré à Piaf.
+/* Talk2Piaf — assistant intégré à Piaf, présent dans la liste des discussions.
    Le moteur de réponse (assistant-kb.js) tourne sur l'appareil : rien de ce qui est écrit ici n'est envoyé à un serveur.
-   Les boutons d'action exécutent de vraies opérations de l'application (ouvrir un écran, démarrer une discussion,
-   envoyer un message, favori, archive, silence, thème, notifications, photo, nom, sessions…) et ne s'exécutent que sur appui. */
+   La discussion se comporte comme les autres (liste d'accueil, favori / archive / silence / renommage, non lus, même écran),
+   mais elle est locale : état et historique sont gardés dans le navigateur, par compte.
+   Les boutons d'action exécutent de vraies opérations de l'application et ne s'exécutent que sur appui. */
 (() => {
   'use strict';
   const P = window.Piaf, KB = window.T2P;
   if (!P || !KB) return;
-  const { h, S, api, sb, toast, errText, toCode, copyText, confirmDialog, promptDialog, store } = P;
+  const { h, S, api, sb, toast, errText, toCode, copyText, confirmDialog, promptDialog, store, icon, iconBtn, sheet, fmt } = P;
 
-  // Accès depuis l'écran d'accueil : true = bouton affiché, false = bouton masqué.
-  const SHOW_BUTTON = true;
-  const OLD_KEYS = ['piaf-talk2piaf-history-v2'];
-  const keyFor = () => 'piaf-talk2piaf-v3-' + (S.me ? S.me.id : 'anon');
-  const MAX_MSGS = 60;
+  const AID = 'talk2piaf', NAME = 'Talk2Piaf', MAX_MSGS = 80;
+  const stKey = () => 'piaf-t2p-v4-' + S.me.id;
+  const OLD = (uid) => ['piaf-talk2piaf-history-v2', 'piaf-talk2piaf-v3-' + uid];
 
-  OLD_KEYS.forEach((k) => { try { localStorage.removeItem(k); } catch { /* */ } });
+  // ---------------------------------------------------------------- état local (par compte)
+  let st = null;
+  const nowIso = () => new Date().toISOString();
+  const plain = (t) => String(t).replace(/\*\*(.+?)\*\*/gs, '$1');
+  function welcome() {
+    const first = (S.me.display_name || '').split(/\s+/)[0];
+    return { role: 'assistant', at: nowIso(), eph: false, links: [], acts: [], chips: KB.starters().slice(0, 4),
+      text: `Bonjour${first ? ' ' + first : ''} ! Je suis Talk2Piaf, l’assistant de Piaf. Posez-moi vos questions sur l’application, ou demandez-moi d’agir : je prépare l’action, et vous la lancez d’un appui sur le bouton.\nPar exemple : « écris à Marie : j’arrive », « mes messages non lus » ou « comment créer un groupe ? ».` };
+  }
+  function state() {
+    if (!S.me) return null;
+    if (st && st.uid === S.me.id) return st;
+    let raw = null; try { raw = JSON.parse(localStorage.getItem(stKey()) || 'null'); } catch { /* */ }
+    if (raw && Array.isArray(raw.msgs)) st = { uid: S.me.id, fav: !!raw.fav, arch: !!raw.arch, muted: !!raw.muted, nick: raw.nick || null, lastRead: raw.lastRead || '', msgs: raw.msgs.filter((m) => m && typeof m.text === 'string' && m.at) };
+    else { st = { uid: S.me.id, fav: false, arch: false, muted: false, nick: null, lastRead: '', msgs: [welcome()] }; save(); }
+    try { OLD(S.me.id).forEach((k) => localStorage.removeItem(k)); } catch { /* */ }
+    return st;
+  }
+  function save() { try { const s = st; localStorage.setItem(stKey(), JSON.stringify({ fav: s.fav, arch: s.arch, muted: s.muted, nick: s.nick, lastRead: s.lastRead, msgs: s.msgs.filter((m) => !m.eph).slice(-MAX_MSGS) })); } catch { /* quota / mode privé */ } }
+  const changed = () => { save(); P.bus.emit('convs'); };
+  const nameOf = () => (state().nick || NAME);
+  const markRead = () => { const s = state(); const last = s.msgs[s.msgs.length - 1]; if (last && s.lastRead < last.at) { s.lastRead = last.at; changed(); } };
 
-  const css = `
-    #talk2piaf-fab{display:${SHOW_BUTTON ? 'inline-flex' : 'none'};align-items:center;justify-content:center;width:42px;height:42px;border:0;border-radius:50%;background:linear-gradient(135deg,#292622 0%,#5d554e 100%);color:#fff;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.14)}
-    #talk2piaf-fab svg{width:23px;height:23px}
-    #layers{z-index:10001!important}#toasts{z-index:10002!important}
-    #talk2piaf{position:fixed;left:0;right:0;top:var(--app-top,0px);height:var(--app-h,100dvh);z-index:10000;background:rgba(20,10,3,.45);display:flex;align-items:flex-end;justify-content:center}
-    .t2p-panel{width:min(720px,100%);height:min(780px,100%);background:var(--bg,#fbf7f2);color:var(--ink,#1d1712);border-radius:22px 22px 0 0;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -10px 45px rgba(0,0,0,.22);animation:t2pIn .2s ease-out}
-    @keyframes t2pIn{from{transform:translateY(24px);opacity:.4}to{transform:none;opacity:1}}
-    .t2p-head{display:flex;align-items:center;gap:12px;padding:12px 8px 12px 16px;border-bottom:1px solid var(--line,#e6dccf);background:var(--surface,#fff)}
-    .t2p-logo{width:42px;height:42px;border-radius:13px;display:block;flex:none}
-    .t2p-title{min-width:0;flex:1}.t2p-title strong{display:block;font-size:16px}.t2p-title span{display:block;margin-top:1px;font-size:12px;color:var(--muted,#6f6256)}
-    .t2p-hbtn{border:0;background:transparent;width:42px;height:42px;border-radius:50%;color:var(--muted,#6f6256);cursor:pointer;display:grid;place-items:center}.t2p-hbtn:hover{background:var(--surface2,#f3ece4)}.t2p-hbtn svg{width:21px;height:21px}
-    .t2p-body{flex:1;overflow:auto;padding:18px 14px 8px;display:flex;flex-direction:column;gap:12px;overscroll-behavior:contain}
-    .t2p-empty{margin:auto;text-align:center;max-width:420px;color:var(--muted,#6f6256);padding:8px 0}.t2p-empty img{width:76px;height:76px;border-radius:22px}.t2p-empty h2{margin:12px 0 6px;color:var(--ink,#1d1712);font-size:22px}.t2p-empty p{margin:0 0 14px;line-height:1.5}
-    .t2p-row{display:flex;flex-direction:column;gap:7px;max-width:min(88%,600px)}.t2p-row.u{align-self:flex-end;align-items:flex-end}.t2p-row.a{align-self:flex-start;align-items:flex-start}
-    .t2p-bubble{padding:10px 14px;border-radius:18px;line-height:1.48;font-size:15px;white-space:pre-wrap;overflow-wrap:anywhere}
-    .t2p-row.u .t2p-bubble{background:var(--accent,#c2410c);color:var(--accent-ink,#fff);border-bottom-right-radius:6px}
-    .t2p-row.a .t2p-bubble{background:var(--surface,#fff);border:1px solid var(--line,#e6dccf);border-bottom-left-radius:6px}
-    .t2p-bubble.busy{color:var(--muted,#6f6256)}.t2p-dots{display:inline-flex;gap:4px;vertical-align:middle}.t2p-dots i{width:6px;height:6px;border-radius:50%;background:currentColor;animation:t2pDot 1s infinite}.t2p-dots i:nth-child(2){animation-delay:.14s}.t2p-dots i:nth-child(3){animation-delay:.28s}@keyframes t2pDot{0%,70%,100%{opacity:.25;transform:translateY(0)}35%{opacity:1;transform:translateY(-2px)}}
-    .t2p-acts,.t2p-links,.t2p-chips{display:flex;flex-wrap:wrap;gap:7px}
-    .t2p-act{min-height:40px;padding:0 15px;border-radius:12px;border:0;background:var(--accent,#c2410c);color:var(--accent-ink,#fff);font:inherit;font-weight:600;font-size:14px;cursor:pointer;text-align:left}
-    .t2p-act:disabled{opacity:.55;cursor:default}.t2p-act.done{background:var(--ok,#1f7a4d);color:#fff;opacity:1}.t2p-act.done::before{content:'✓ '}
-    .t2p-link{display:inline-flex;align-items:center;min-height:38px;padding:0 13px;border-radius:12px;border:1px solid var(--accent,#c2410c);color:var(--accent,#c2410c);background:transparent;text-decoration:none;font-weight:600;font-size:14px}.t2p-link::after{content:' ↗';margin-left:4px}
-    .t2p-chip{min-height:36px;padding:0 13px;border-radius:18px;border:1px solid var(--line,#e6dccf);background:var(--surface,#fff);color:var(--ink,#1d1712);font:inherit;font-size:13.5px;cursor:pointer;text-align:left}.t2p-chip:hover{background:var(--accent-soft,#ffe6d3)}
-    .t2p-chips.start{justify-content:center}
-    .t2p-compose{display:flex;gap:9px;align-items:flex-end;padding:10px 12px max(10px,env(safe-area-inset-bottom));border-top:1px solid var(--line,#e6dccf);background:var(--surface,#fff)}
-    .t2p-compose textarea{flex:1;resize:none;min-height:44px;max-height:130px;border:1px solid var(--line,#e6dccf);border-radius:18px;background:var(--bg,#fbf7f2);color:var(--ink,#1d1712);padding:11px 14px;font:inherit;line-height:1.35;outline:none}
-    .t2p-compose textarea:focus{border-color:var(--accent,#c2410c)}
-    .t2p-send{width:44px;height:44px;border:0;border-radius:50%;background:var(--accent,#c2410c);color:var(--accent-ink,#fff);display:grid;place-items:center;cursor:pointer;flex:none}.t2p-send:disabled{opacity:.45;cursor:default}.t2p-send svg{width:19px}
-    .t2p-foot{text-align:center;font-size:11px;color:var(--muted,#6f6256);padding:0 12px 6px;background:var(--surface,#fff)}
-    @media(min-width:720px){#talk2piaf{align-items:center;padding:20px}.t2p-panel{height:min(780px,100%);border-radius:22px}}
-  `;
-  const style = document.createElement('style'); style.textContent = css; document.head.append(style);
-
-  const SVG = (inner, sw = 1.8) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
-  const ico = {
-    bird: SVG('<path d="M20.5 4.5c-5.8-1.7-11.7.1-15.1 4.6-2.1 2.8-1.8 6.3.7 8.4l-2.2 3.1 4.3-1.5c3.9 1.6 8.6.1 10.8-3.4 1.8-2.8 2.2-7.1 1.5-11.2Z"/><path d="M8.2 12.2c1.5-1.1 3.5-2 6.1-2.4"/><circle cx="9" cy="12.7" r=".7" fill="currentColor" stroke="none"/><circle cx="12" cy="11.7" r=".7" fill="currentColor" stroke="none"/><circle cx="15" cy="11.1" r=".7" fill="currentColor" stroke="none"/>'),
-    send: SVG('<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>', 1.9),
-    trash: SVG('<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/>'),
-    close: SVG('<path d="M18 6L6 18M6 6l12 12"/>', 2),
+  // La discussion telle que la liste d'accueil la voit : mêmes champs qu'une discussion ordinaire.
+  P.assistantConv = () => {
+    const s = state(), last = s.msgs[s.msgs.length - 1];
+    return { conversation_id: AID, assistant: true, kind: 'assistant', other_id: null, other_public_id: null, other_name: NAME, nickname: s.nick, avatar_path: null,
+      archived: s.arch, favorite: s.fav, muted: s.muted, blocked_by_me: false, members: 0,
+      last_message_id: last ? 't2p' : null, last_at: last ? last.at : nowIso(), last_kind: 'text', last_body: last ? plain(last.text).replace(/\s+/g, ' ') : '',
+      last_sender: last && last.role === 'user' ? S.me.id : 't2p', last_deleted: false,
+      unread: s.msgs.filter((m) => m.role === 'assistant' && !m.eph && m.at > s.lastRead).length };
   };
-  const svgEl = (markup) => { const s = document.createElement('span'); s.style.display = 'contents'; s.innerHTML = markup; return s; };   // constantes internes uniquement
+  P.withAssistant = (convs) => (S.me ? [...convs, P.assistantConv()].sort((a, b) => new Date(b.last_at) - new Date(a.last_at)) : convs);
+  P.assistantAvatar = (size = 44) => h('span', { class: 'avatar t2p', style: { width: size + 'px', height: size + 'px' }, 'aria-hidden': 'true' }, h('img', { src: 'icons/talk2piaf.svg', alt: '' }));
+  P.openAssistant = () => P.go('#/talk2piaf');
 
-  // ---------------------------------------------------------------- historique (par compte, sur l'appareil)
-  let history = [];
-  const load = () => { try { const v = JSON.parse(localStorage.getItem(keyFor()) || '[]'); history = Array.isArray(v) ? v.filter((m) => m && typeof m.text === 'string').slice(-MAX_MSGS) : []; } catch { history = []; } };
-  const save = () => { try { localStorage.setItem(keyFor(), JSON.stringify(history.filter((m) => !m.eph).slice(-MAX_MSGS))); } catch { /* quota / mode privé */ } };
-  const mem = { topic: null, offer: null };
+  // Menu ⋯ de la liste : mêmes entrées que pour les autres discussions, appliquées à l'état local.
+  const origConvMenu = P.convMenu;
+  P.convMenu = (c, opts = {}) => {
+    if (!c || !c.assistant) return origConvMenu(c, opts);
+    const s = state();
+    return sheet(nameOf(), [
+      { icon: 'star', label: s.fav ? 'Retirer des favoris' : 'Mettre en favori', onClick: () => { s.fav = !s.fav; changed(); } },
+      { icon: 'archive', label: s.arch ? 'Désarchiver' : 'Archiver', onClick: () => { s.arch = !s.arch; changed(); toast(s.arch ? 'Archivée' : 'Désarchivée'); if (s.arch) opts.afterArchive?.(); } },
+      { icon: 'mute', label: s.muted ? 'Réactiver les notifications' : 'Mettre en silence', onClick: () => { s.muted = !s.muted; changed(); } },
+      { icon: 'edit', label: 'Renommer (visible par moi seul)', onClick: async () => {
+          const v = await promptDialog('Renommer la discussion', 'Nom affiché', s.nick || NAME, { hint: 'Ce nom n’est visible que par vous. Laissez vide pour revenir au nom d’origine.' });
+          if (v !== null) { s.nick = v.trim() || null; changed(); } } },
+      { sep: true },
+      { icon: 'trash', danger: true, label: 'Supprimer l’historique pour moi', onClick: async () => {
+          if (await confirmDialog('Supprimer l’historique ?', 'Votre échange avec Talk2Piaf sera effacé de cet appareil. Cette action est définitive.', 'Supprimer', true)) { s.msgs = []; mem.topic = null; mem.offer = null; changed(); toast('Historique supprimé'); opts.afterClear?.(); } } },
+    ]);
+  };
 
   // ---------------------------------------------------------------- contexte fourni au moteur (état réel de l'application)
+  const mem = { topic: null, offer: null };
   const inviteText = () => `Salut ! Je suis sur Piaf, une messagerie privée sans e-mail ni numéro de téléphone. Crée ton compte, puis écris-moi avec mon identifiant : ${S.me.public_id}. L'application : ${location.origin}${location.pathname}`;
   function context() {
     const me = S.me || {};
     return {
-      name: me.display_name || '', first: (me.display_name || '').split(/\s+/)[0] || '', pid: me.public_id || '', id8: me.public_id ? P.fmt.id8(me.public_id) : '',
+      name: me.display_name || '', first: (me.display_name || '').split(/\s+/)[0] || '', pid: me.public_id || '', id8: me.public_id ? fmt.id8(me.public_id) : '',
       now: new Date(), settings: S.settings || {}, perm: 'Notification' in window ? Notification.permission : 'unsupported',
       online: S.online, rt: S.rt, theme: store.get('piaf-theme', 'auto'), installable: !!P.installEvt,
       standalone: matchMedia('(display-mode: standalone)').matches || navigator.standalone === true,
@@ -86,21 +90,20 @@
     f.addEventListener('change', () => { const file = f.files[0]; f.remove(); res(file || null); }); f.addEventListener('cancel', () => { f.remove(); res(null); });
     document.body.append(f); f.click();
   });
-  const leave = (fn) => { closePanel(); fn(); };
   const openConvAct = (id) => ({ l: 'Ouvrir la discussion', a: 'conv', p: { id } });
   const rnd = (n) => { const a = new Uint32Array(1); let x; do { crypto.getRandomValues(a); x = a[0]; } while (x >= Math.floor(4294967296 / n) * n); return x % n; };
 
-  // Chaque action renvoie { say, eph?, acts?, nodone? } (message de l'assistant), { clear } ou null ; elle lève une erreur à message lisible.
+  // Chaque action renvoie { say, eph?, acts?, nodone? } (réponse de l'assistant), { clear } ou null ; elle lève une erreur à message lisible.
   const ACTIONS = {
-    go: (p) => { leave(() => P.go(p.h)); return null; },
-    conv: (p) => { if (!convById(p.id)) throw new Error('Cette discussion n’existe plus.'); leave(() => P.go('#/c/' + p.id)); return null; },
-    gallery: (p) => { leave(() => P.go('#/m/' + p.id)); return null; },
-    group: (p) => { leave(() => P.go('#/g/' + p.id)); return null; },
-    privacy: () => { leave(() => location.assign('privacy.html')); return null; },
+    go: (p) => { P.go(p.h); return null; },
+    conv: (p) => { if (!convById(p.id)) throw new Error('Cette discussion n’existe plus.'); P.go('#/c/' + p.id); return null; },
+    gallery: (p) => { P.go('#/m/' + p.id); return null; },
+    group: (p) => { P.go('#/g/' + p.id); return null; },
+    privacy: () => { location.assign('privacy.html'); return null; },
     async start(p) {
       if (!S.online) throw new Error('Pas de connexion : réessayez quand le réseau revient.');
       let id; try { id = await api.rpc('start_conversation', { p_public_id: p.pid }); } catch (e) { throw new Error(toCode(e) === 'not_found' ? 'Aucune personne ne correspond à cet identifiant.' : errText(e)); }
-      await P.refreshConvs(); leave(() => P.go('#/c/' + id)); return null;
+      await P.refreshConvs(); P.go('#/c/' + id); return null;
     },
     async send(p) {
       const c = convById(p.id); if (!c) throw new Error('Cette discussion n’existe plus.');
@@ -160,116 +163,121 @@
       P.installEvt.prompt(); const c = await P.installEvt.userChoice; P.installEvt = null;
       return { say: c.outcome === 'accepted' ? 'Piaf s’installe sur votre appareil. 🎉' : 'Installation annulée.' };
     },
-    forget: () => { history = []; mem.topic = null; mem.offer = null; save(); return { clear: true }; },
+    forget: () => ({ clear: true }),
     reveal: (p) => ({ say: p.t }),
   };
 
-  // ---------------------------------------------------------------- interface
-  let ui = null;
-  function closePanel() { if (ui) { ui.root.remove(); document.removeEventListener('keydown', ui.onKey); ui = null; } }
-
+  // ---------------------------------------------------------------- écran de discussion (mêmes composants que les autres discussions)
+  const safeUrl = (u) => { try { const x = new URL(u); return x.protocol === 'https:' || x.protocol === 'http:' ? x.href : null; } catch { return null; } };
   function inline(text) { // **gras** uniquement ; tout le reste est du texte brut (aucun HTML)
     const out = []; String(text).split(/\*\*(.+?)\*\*/gs).forEach((t, i) => { if (t) out.push(i % 2 ? h('strong', null, t) : document.createTextNode(t)); });
     return out;
   }
-  const safeUrl = (u) => { try { const x = new URL(u); return x.protocol === 'https:' || x.protocol === 'http:' ? x.href : null; } catch { return null; } };
-  const chip = (c) => h('button', { type: 'button', class: 't2p-chip', onclick: () => ask(c.t) }, c.l);
+  const sameGroup = (a, b) => a && b && a.role === b.role && fmt.dayKey(a.at) === fmt.dayKey(b.at) && Math.abs(new Date(b.at) - new Date(a.at)) < 300000;
 
-  function draw() {
-    if (!ui) return;
-    const body = ui.body; body.replaceChildren();
-    if (!history.length) {
-      const first = (S.me && S.me.display_name || '').split(/\s+/)[0];
-      body.append(h('div', { class: 't2p-empty' }, h('img', { src: 'icons/talk2piaf.svg', alt: '' }), h('h2', null, first ? `Bonjour ${first}, je suis Talk2Piaf.` : 'Bonjour, je suis Talk2Piaf.'),
-        h('p', null, 'Posez-moi vos questions sur Piaf ou demandez-moi d’agir : je prépare l’action, vous la lancez d’un appui sur le bouton.'),
-        h('div', { class: 't2p-chips start' }, KB.starters().map(chip))));
-      return;
+  P.views.assistant = () => {
+    const s = state();
+    let destroyed = false, busy = false, typing = false, timer = null;
+    const list = h('div', { class: 'msg-list', role: 'list', 'aria-live': 'polite', 'aria-relevant': 'additions' });
+    const scroller = h('div', { class: 'msgs' }, list);
+    const ta = h('textarea', { rows: '1', placeholder: 'Message', 'aria-label': 'Écrire un message', maxlength: '600', enterkeyhint: 'enter',
+      oninput: () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; },
+      onkeydown: (e) => { if (e.key === 'Enter' && !e.shiftKey && matchMedia('(pointer:fine)').matches) { e.preventDefault(); sendText(); } } });
+    const sendBtn = h('button', { class: 'send', type: 'button', 'aria-label': 'Envoyer', onclick: () => sendText() }, icon('send', 22));
+    const composer = h('div', { class: 'composer' }, h('div', { class: 'composer-row' }, ta, sendBtn));
+    const headTitle = h('button', { class: 'chat-title', type: 'button', onclick: () => profileSheet() });
+    const header = h('header', { class: 'topbar chat-top' }, iconBtn('back', 'Retour aux discussions', () => P.back('#/')), headTitle, iconBtn('dots', 'Menu de la discussion', () => menu()));
+    const el = h('div', { class: 'screen chat' }, header, h('div', { class: 'msgs-wrap' }, scroller), composer);
+
+    function drawHeader() {
+      headTitle.replaceChildren(P.assistantAvatar(38), h('span', { class: 'chat-title-text' }, h('strong', null, nameOf()), h('span', { class: 'muted small' }, 'Assistant de Piaf')));
     }
-    history.forEach((m, i) => {
-      const last = i === history.length - 1;
-      const row = h('div', { class: 't2p-row ' + (m.role === 'user' ? 'u' : 'a') }, h('div', { class: 't2p-bubble' }, inline(m.text)));
-      if (m.role === 'assistant') {
+    function buildMsg(m, idx, first, last, isLastMsg) {
+      const mine = m.role === 'user';
+      const parts = [h('div', { class: 'text' }, mine ? P.linkify(m.text) : inline(m.text)),
+        h('div', { class: 'meta' }, h('time', { datetime: m.at }, fmt.time(m.at)), mine ? h('span', { class: 'st read', title: 'Lu' }, icon('check2', 16)) : null)];
+      const bubble = h('div', { class: 'bubble' + (mine ? ' mine' : '') + (first ? ' first' : '') + (last ? ' last' : ''), tabindex: '0', role: 'button', 'aria-haspopup': 'dialog', 'aria-label': 'Actions du message',
+        onclick: () => msgSheet(idx), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); msgSheet(idx); } } }, parts);
+      const kids = [bubble];
+      if (!mine) {
+        const extras = [];
         const links = (m.links || []).map((l) => { const u = safeUrl(l.u); return u ? h('a', { class: 't2p-link', href: u, target: '_blank', rel: 'noopener noreferrer nofollow' }, l.l) : null; }).filter(Boolean);
-        if (links.length) row.append(h('div', { class: 't2p-links' }, links));
-        if (m.acts && m.acts.length) row.append(h('div', { class: 't2p-acts' }, m.acts.map((a, j) => h('button', { type: 'button', class: 't2p-act' + (a.done ? ' done' : ''), disabled: !!a.done, onclick: (e) => runAct(i, j, e.currentTarget) }, a.l))));
-        if (last && m.chips && m.chips.length) row.append(h('div', { class: 't2p-chips' }, m.chips.map(chip)));
+        if (links.length) extras.push(h('div', { class: 't2p-links' }, links));
+        if (m.acts && m.acts.length) extras.push(h('div', { class: 't2p-acts' }, m.acts.map((a, j) => h('button', { type: 'button', class: 't2p-act' + (a.done ? ' done' : ''), disabled: !!a.done, onclick: (e) => runAct(idx, j, e.currentTarget) }, a.l))));
+        if (isLastMsg && !typing && m.chips && m.chips.length) extras.push(h('div', { class: 't2p-chips' }, m.chips.map((c) => h('button', { type: 'button', class: 't2p-chip', onclick: () => sendText(c.t) }, c.l))));
+        if (extras.length) kids.push(h('div', { class: 't2p-extras' }, extras));
       }
-      body.append(row);
-    });
-    body.scrollTop = body.scrollHeight;
-  }
-
-  function pushAssistant(r) {
-    history.push({ role: 'assistant', text: r.text, links: r.links || [], acts: (r.acts || []).map((a) => ({ l: a.l, a: a.a, p: a.p || {} })), chips: r.chips || [], eph: !!r.eph });
-    if (r.topic !== undefined) mem.topic = r.unknown ? null : (r.topic || mem.topic);
-    if (r.acts !== undefined) mem.offer = (r.acts && r.acts[0]) || null;
-    save(); draw();
-  }
-
-  async function runAct(i, j, btn) {
-    const act = history[i] && history[i].acts[j]; if (!act || act.done) return;
-    const fn = ACTIONS[act.a]; if (!fn) return;
-    btn.disabled = true;
-    try {
-      const r = await fn(act.p || {});
-      if (r && r.clear) { draw(); toast('Historique effacé'); return; }
-      if (!(r && r.nodone)) act.done = true; else btn.disabled = false;
-      if (r && r.say) pushAssistant({ text: r.say, acts: r.acts, eph: r.eph, chips: [] }); else { save(); draw(); }
-    } catch (e) {
-      btn.disabled = false;
-      pushAssistant({ text: '⚠️ ' + (e && e.message ? e.message : 'L’action n’a pas pu aboutir. Réessayez.'), chips: [] });
+      return h('div', { class: 'msg' + (mine ? ' mine' : '') + (first ? ' gap' : ''), role: 'listitem' }, kids);
     }
-  }
+    function render() {
+      if (destroyed) return;
+      const all = s.msgs, frag = [];
+      all.forEach((m, i) => {
+        const prev = all[i - 1], next = all[i + 1];
+        if (!prev || fmt.dayKey(prev.at) !== fmt.dayKey(m.at)) frag.push(h('div', { class: 'day', role: 'separator' }, h('span', null, fmt.dayLabel(m.at))));
+        frag.push(buildMsg(m, i, !sameGroup(prev, m), !sameGroup(m, next), i === all.length - 1));
+      });
+      if (!all.length) frag.push(h('div', { class: 't2p-welcome' }, h('img', { src: 'icons/talk2piaf.svg', alt: '' }), h('strong', null, NAME), h('span', null, 'Posez-moi une question sur Piaf.'),
+        h('div', { class: 't2p-chips', style: { justifyContent: 'center', marginTop: '10px' } }, KB.starters().slice(0, 4).map((c) => h('button', { type: 'button', class: 't2p-chip', onclick: () => sendText(c.t) }, c.l)))));
+      if (typing) frag.push(h('div', { class: 'msg gap', role: 'listitem' }, h('div', { class: 'bubble first last' }, h('span', { class: 't2p-typing' }, h('i'), h('i'), h('i')))));
+      list.replaceChildren(...frag);
+      scroller.scrollTop = scroller.scrollHeight;
+    }
 
-  let busy = false;
-  function ask(text) {
-    text = String(text || '').trim(); if (!text || busy || !ui) return;
-    busy = true; ui.input.disabled = true; ui.send.disabled = true;
-    history.push({ role: 'user', text: text.slice(0, 600) }); save(); draw();
-    const waiting = h('div', { class: 't2p-row a' }, h('div', { class: 't2p-bubble busy' }, h('span', { class: 't2p-dots' }, h('i'), h('i'), h('i')))); ui.body.append(waiting); ui.body.scrollTop = ui.body.scrollHeight;
-    let r; try { r = KB.reply(text, context(), mem); } catch (e) { console.error(e); r = null; }
-    if (!r) r = { text: 'Je n’ai pas réussi à traiter ce message. Pouvez-vous le reformuler ?', chips: KB.starters().slice(0, 4) };
-    setTimeout(() => {
-      waiting.remove(); busy = false;
-      if (ui) { ui.input.disabled = false; ui.send.disabled = false; pushAssistant(r); ui.input.focus({ preventScroll: true }); }
-    }, Math.min(700, 220 + r.text.length * 2));
-  }
+    function msgSheet(idx) {
+      const m = s.msgs[idx]; if (!m) return;
+      sheet(null, [
+        { icon: 'copy', label: 'Copier', onClick: () => copyText(plain(m.text)) },
+        { sep: true },
+        { icon: 'eye', label: 'Supprimer pour moi', danger: true, onClick: () => { s.msgs.splice(idx, 1); changed(); render(); } },
+      ]);
+    }
+    function menu() { P.convMenu(P.assistantConv(), { afterArchive: () => P.go('#/'), afterClear: () => { render(); } }); }
+    function profileSheet() {
+      sheet(null, [
+        { icon: 'search', label: 'Voir ce que je sais faire', onClick: () => sendText('Que peux-tu faire ?') },
+        { icon: 'sliders', label: 'Favori, archive, silence, renommer…', onClick: () => menu() },
+      ], h('div', { class: 'profile-card' }, P.assistantAvatar(84), h('strong', { class: 'big' }, nameOf()), s.nick ? h('span', { class: 'muted small' }, 'Renommé « ' + s.nick + ' » (visible par vous seul)') : null,
+        h('div', { class: 'muted' }, 'Assistant intégré à Piaf'), h('div', { class: 'muted small' }, 'Développé par Ehorg · fonctionne sur votre appareil')));
+    }
 
-  function open() {
-    if (ui || !S.me) return;
-    load();
-    const input = h('textarea', { maxlength: '600', rows: '1', placeholder: 'Écrivez à Talk2Piaf…', 'aria-label': 'Message', enterkeyhint: 'send' });
-    const send = h('button', { class: 't2p-send', type: 'submit', 'aria-label': 'Envoyer' }, svgEl(ico.send));
-    const body = h('div', { class: 't2p-body', role: 'log', 'aria-live': 'polite' });
-    const hbtn = (svg, label, fn) => h('button', { class: 't2p-hbtn', type: 'button', 'aria-label': label, title: label, onclick: fn }, svgEl(svg));
-    const form = h('form', { class: 't2p-compose', onsubmit: (e) => { e.preventDefault(); const v = input.value; input.value = ''; input.style.height = 'auto'; ask(v); } }, input, send);
-    const panel = h('section', { class: 't2p-panel', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Talk2Piaf' },
-      h('header', { class: 't2p-head' }, h('img', { class: 't2p-logo', src: 'icons/talk2piaf.svg', alt: '' }),
-        h('div', { class: 't2p-title' }, h('strong', null, 'Talk2Piaf'), h('span', null, 'Assistant développé par Ehorg')),
-        hbtn(ico.trash, 'Effacer la conversation', async () => { if (!history.length) return; if (await confirmDialog('Effacer la conversation ?', 'Votre échange avec l’assistant sera supprimé de cet appareil.', 'Effacer', true)) { history = []; mem.topic = null; mem.offer = null; save(); draw(); } }),
-        hbtn(ico.close, 'Fermer', closePanel)),
-      body, h('div', { class: 't2p-foot' }, 'Vos échanges avec l’assistant restent sur cet appareil.'), form);
-    const root = h('div', { id: 'talk2piaf' }, panel);
-    root.addEventListener('click', (e) => { if (e.target === root) closePanel(); });
-    const onKey = (e) => { if (e.key === 'Escape' && !P.layers.length) closePanel(); };
-    document.addEventListener('keydown', onKey);
-    input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 130) + 'px'; });
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && matchMedia('(hover:hover)').matches) { e.preventDefault(); form.requestSubmit(); } });
-    document.body.append(root);
-    ui = { root, body, input, send, onKey }; draw();
-    setTimeout(() => { if (ui && history.length) input.focus({ preventScroll: true }); }, 50);
-  }
+    function push(m) {
+      s.msgs.push(Object.assign({ at: nowIso(), links: [], acts: [], chips: [], eph: false }, m));
+      if (m.role === 'assistant') { s.arch = false; if (!destroyed) s.lastRead = s.msgs[s.msgs.length - 1].at; }
+      changed(); render();
+    }
+    async function runAct(idx, j, btn) {
+      const act = s.msgs[idx] && s.msgs[idx].acts[j]; if (!act || act.done) return;
+      const fn = ACTIONS[act.a]; if (!fn) return;
+      btn.disabled = true;
+      try {
+        const r = await fn(act.p || {});
+        if (destroyed) return;
+        if (r && r.clear) { s.msgs = []; mem.topic = null; mem.offer = null; changed(); render(); toast('Historique effacé'); return; }
+        if (!(r && r.nodone)) act.done = true; else btn.disabled = false;
+        if (r && r.say) { push({ role: 'assistant', text: r.say, acts: (r.acts || []).map((a) => ({ l: a.l, a: a.a, p: a.p || {} })), eph: !!r.eph }); } else { changed(); render(); }
+      } catch (e) {
+        if (destroyed) return;
+        btn.disabled = false; push({ role: 'assistant', text: '⚠️ ' + (e && e.message ? e.message : 'L’action n’a pas pu aboutir. Réessayez.') });
+      }
+    }
+    function sendText(text) {
+      const v = String(text != null ? text : ta.value).trim(); if (!v || busy) return;
+      if (text == null) { ta.value = ''; ta.style.height = 'auto'; }
+      busy = true; typing = true; push({ role: 'user', text: v.slice(0, 600) });
+      let r; try { r = KB.reply(v, context(), mem); } catch (e) { console.error(e); r = null; }
+      if (!r) r = { text: 'Je n’ai pas réussi à traiter ce message. Pouvez-vous le reformuler ?', chips: KB.starters().slice(0, 4), links: [], acts: [] };
+      timer = setTimeout(() => {
+        typing = false; busy = false;
+        if (r.topic !== undefined) mem.topic = r.unknown ? null : (r.topic || mem.topic);
+        mem.offer = (r.acts && r.acts[0]) || null;
+        push({ role: 'assistant', text: r.text, links: r.links || [], acts: (r.acts || []).map((a) => ({ l: a.l, a: a.a, p: a.p || {} })), chips: r.chips || [] });
+        if (!destroyed && matchMedia('(pointer:fine)').matches) ta.focus({ preventScroll: true });
+      }, Math.min(700, 220 + r.text.length * 2));
+    }
 
-  P.openAssistant = open;
-
-  // ---------------------------------------------------------------- bouton d'accès (affiché ou masqué selon SHOW_BUTTON)
-  function mountButton() {
-    const topbar = document.querySelector('.home .topbar');
-    if (!topbar || document.getElementById('talk2piaf-fab')) return;
-    const settings = topbar.querySelector('button');
-    const b = h('button', { id: 'talk2piaf-fab', type: 'button', title: 'Talk2Piaf', 'aria-label': 'Ouvrir Talk2Piaf', onclick: open }, svgEl(ico.bird));
-    if (settings) topbar.insertBefore(b, settings); else topbar.append(b);
-  }
-  new MutationObserver(mountButton).observe(document.body, { childList: true, subtree: true });
-  mountButton();
+    drawHeader(); render(); markRead();
+    const un = [P.bus.on('convs', () => { if (!destroyed) drawHeader(); })];
+    return { el, mounted() { scroller.scrollTop = scroller.scrollHeight; }, destroy() { destroyed = true; clearTimeout(timer); un.forEach((u) => u()); markRead(); } };
+  };
 })();
