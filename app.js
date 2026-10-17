@@ -25,6 +25,7 @@ function h(tag, attrs, ...kids) {
 const $ = (s, el = document) => el.querySelector(s);
 
 const ICONS = {
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14.5a5.5 5.5 0 0 1 4.5 5.5"/>',
   camera: '<path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/>', // tracés 24×24, icônes trait fin (constantes, jamais de contenu utilisateur)
   back: '<path d="M15 18l-6-6 6-6"/>', plus: '<path d="M12 5v14M5 12h14"/>', x: '<path d="M18 6L6 18M6 6l12 12"/>',
   send: '<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>',
@@ -97,10 +98,10 @@ function avatarUrl(path) {
     .catch(() => { avatarUrls.delete(path); return null; }));
   return avatarUrls.get(path);
 }
-function avatar(name, size = 44, userId) {
+function avatar(name, size = 44, userId, pathOverride) {
   let hash = 0; for (const ch of name || '?') hash = (hash * 31 + ch.codePointAt(0)) >>> 0;
   const el = h('span', { class: 'avatar', style: { width: size + 'px', height: size + 'px', fontSize: size * 0.42 + 'px', '--hue': String(hash % 360) }, 'aria-hidden': 'true' }, [...(name || '?')][0].toUpperCase());
-  const p = userId && (S.me && userId === S.me.id ? S.me.avatar_path : S.avatars[userId]);
+  const p = pathOverride || (userId && (S.me && userId === S.me.id ? S.me.avatar_path : S.avatars[userId]));
   if (p) avatarUrl(p).then((u) => { if (u) el.replaceChildren(h('img', { src: u, alt: '' })); });
   return el;
 }
@@ -128,6 +129,7 @@ const ERR = {
   rate_limited: 'Trop d’actions en peu de temps. Réessayez dans un instant.',
   invalid_input: 'Contenu invalide.', window_expired: 'Le délai pour cette action est dépassé.',
   too_many_pins: '5 messages épinglés au maximum par conversation.', use_media_delete: 'Utilisez la suppression du média.',
+  group_full: 'Un groupe est limité à 32 personnes.', last_member: 'Vous êtes la dernière personne du groupe : supprimez-le plutôt.', last_admin: 'Il faut au moins un administrateur.',
   bad_image: 'Image illisible. Essayez une photo JPEG ou PNG.',
   bad_type: 'Format non accepté. Photos : JPEG, PNG, WebP, GIF, HEIC. Vidéos : MP4, WebM, MOV.',
   file_too_large: 'Fichier trop volumineux.', upload_missing: 'Le fichier n’est pas arrivé sur le serveur. Réessayez.',
@@ -254,28 +256,39 @@ async function refreshConvs() {
   loadAvatars().catch(() => {});
 }
 async function loadAvatars() {
-  const ids = [...new Set(S.convs.map((c) => c.other_id))]; if (!ids.length) return;
+  const ids = [...new Set(S.convs.map((c) => c.other_id).filter(Boolean))]; if (!ids.length) return;
   const rows = await q(sb.from('profiles').select('id,avatar_path').in('id', ids));
   let changed = false;
   for (const r of rows) if ((S.avatars[r.id] || null) !== (r.avatar_path || null)) { S.avatars[r.id] = r.avatar_path; changed = true; }
   if (changed) bus.emit('convs');
 }
 // Change ou retire la photo de profil (recadrage carré au centre, 256 px, JPEG : les métadonnées de l'original ne sont jamais envoyées).
+async function uploadAvatar(folder, file) {
+  if (!/^image\//.test(file.type)) throw new PiafError('bad_type');
+  let bmp; try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { throw new PiafError('bad_image'); }
+  const s = Math.min(bmp.width, bmp.height), c = document.createElement('canvas'); c.width = c.height = 256;
+  c.getContext('2d').drawImage(bmp, (bmp.width - s) / 2, (bmp.height - s) / 2, s, s, 0, 0, 256, 256); bmp.close?.();
+  const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85)); if (!blob) throw new PiafError('bad_image');
+  const path = folder + '/' + uuid() + '.jpg';
+  const up = await sb.storage.from('avatars').upload(path, blob, { contentType: 'image/jpeg' }); if (up.error) throw up.error;
+  return path;
+}
 Piaf.setAvatar = async (file) => {
   const old = S.me.avatar_path;
   if (!file) { await rpc('remove_avatar'); S.me.avatar_path = null; }
   else {
-    if (!/^image\//.test(file.type)) throw new PiafError('bad_type');
-    let bmp; try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { throw new PiafError('bad_image'); }
-    const s = Math.min(bmp.width, bmp.height), c = document.createElement('canvas'); c.width = c.height = 256;
-    c.getContext('2d').drawImage(bmp, (bmp.width - s) / 2, (bmp.height - s) / 2, s, s, 0, 0, 256, 256); bmp.close?.();
-    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85)); if (!blob) throw new PiafError('bad_image');
-    const path = S.me.id + '/' + uuid() + '.jpg';
-    const up = await sb.storage.from('avatars').upload(path, blob, { contentType: 'image/jpeg' }); if (up.error) throw up.error;
+    const path = await uploadAvatar(S.me.id, file);
     try { await rpc('set_avatar', { p_path: path }); } catch (e) { sb.storage.from('avatars').remove([path]).catch(() => {}); throw e; }
     S.me.avatar_path = path;
   }
   if (old) sb.storage.from('avatars').remove([old]).catch(() => {});
+};
+Piaf.setGroupAvatar = async (convId, file) => {
+  const old = Piaf.conv(convId)?.avatar_path; let path = null;
+  if (file) path = await uploadAvatar(convId, file);
+  try { await rpc('group_set_avatar', { p_conv: convId, p_path: path }); } catch (e) { if (path) sb.storage.from('avatars').remove([path]).catch(() => {}); throw e; }
+  if (old) sb.storage.from('avatars').remove([old]).catch(() => {});
+  await Piaf.refreshConvs();
 };
 Piaf.refreshConvs = () => { clearTimeout(convTimer); return new Promise((res) => { convTimer = setTimeout(() => refreshConvs().then(res, res), 150); }); };
 Piaf.conv = (id) => S.convs.find((c) => c.conversation_id === id);
@@ -363,6 +376,8 @@ function parseRoute() {
   const uuidRe = /^[0-9a-f-]{36}$/i;
   if (p[0] === 'c' && uuidRe.test(p[1] || '')) return { name: 'chat', id: p[1] };
   if (p[0] === 'm' && uuidRe.test(p[1] || '')) return { name: 'gallery', id: p[1] };
+  if (p[0] === 'g' && p[1] === 'new') return { name: 'groupnew' };
+  if (p[0] === 'g' && uuidRe.test(p[1] || '')) return p[2] === 'add' ? { name: 'groupadd', id: p[1] } : { name: 'group', id: p[1] };
   if (p[0] === 'new') return { name: 'new' };
   if (p[0] === 'settings') return { name: 'settings' };
   return { name: 'home' };

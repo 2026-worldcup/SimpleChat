@@ -98,7 +98,8 @@ Piaf.views.home = () => {
   function preview(c) {
     if (!c.last_message_id) return 'Nouvelle discussion';
     if (c.last_deleted) return 'Message supprimé';
-    return (c.last_sender === myId() ? 'Vous : ' : '') + (c.last_kind === 'media' ? '📎 Média' : c.last_body);
+    if (c.last_kind === 'system') return c.last_body;
+    return (c.last_sender === myId() ? 'Vous : ' : c.kind === 'group' && c.last_sender_name ? c.last_sender_name + ' : ' : '') + (c.last_kind === 'media' ? '📎 Média' : c.last_body);
   }
   function drawList() {
     const all = S.convs;
@@ -107,7 +108,7 @@ Piaf.views.home = () => {
     tabsEl.replaceChildren(...[['chats', 'Discussions', unreadOf(inbox)], ['fav', 'Favoris', 0], ['arch', 'Archivées', 0]].map(([k, l, n]) =>
       h('button', { role: 'tab', type: 'button', class: 'tab' + (tab === k ? ' on' : ''), 'aria-selected': String(tab === k), onclick: () => { tab = k; drawList(); } }, l, n ? h('span', { class: 'badge' }, n > 99 ? '99+' : n) : null)));
     let rows = tab === 'chats' ? inbox : tab === 'fav' ? fav : arch;
-    if (filter) rows = rows.filter((c) => (Piaf.convName(c) + ' ' + c.other_public_id).toLowerCase().includes(filter) || preview(c).toLowerCase().includes(filter));
+    if (filter) rows = rows.filter((c) => (Piaf.convName(c) + ' ' + (c.other_public_id || '')).toLowerCase().includes(filter) || preview(c).toLowerCase().includes(filter));
     if (!S.convsLoaded && !loadErr) { list.replaceChildren(...Array.from({ length: 5 }, () => h('div', { class: 'conv skeleton' }, h('span', { class: 'avatar sk' }), h('div', { class: 'conv-main' }, h('span', { class: 'sk-line w60' }), h('span', { class: 'sk-line w90' }))))); return; }
     if (loadErr && !all.length) { list.replaceChildren(h('div', { class: 'empty' }, h('p', null, 'Impossible de charger vos discussions.'), h('button', { class: 'btn', onclick: () => refresh() }, 'Réessayer'))); return; }
     if (!rows.length) {
@@ -119,7 +120,7 @@ Piaf.views.home = () => {
     }
     list.replaceChildren(...rows.map((c) => h('div', { class: 'conv' + (c.unread ? ' unread' : ''), role: 'listitem' },
       h('button', { class: 'conv-open', type: 'button', onclick: () => Piaf.go('#/c/' + c.conversation_id), 'aria-label': `${Piaf.convName(c)}${c.unread ? `, ${c.unread} non lus` : ''}` },
-        avatar(Piaf.convName(c), 44, c.other_id),
+        avatar(Piaf.convName(c), 44, c.other_id, c.avatar_path),
         h('span', { class: 'conv-main' },
           h('span', { class: 'conv-top' }, h('span', { class: 'conv-name' }, Piaf.convName(c)), h('span', { class: 'conv-time' }, fmt.listTime(c.last_at))),
           h('span', { class: 'conv-bot' }, h('span', { class: 'conv-prev' }, preview(c)),
@@ -162,7 +163,8 @@ Piaf.views.new = () => {
   results.append(hint);
   const el = h('div', { class: 'screen' },
     h('header', { class: 'topbar' }, iconBtn('back', 'Retour', () => Piaf.back('#/')), h('h1', null, 'Nouvelle discussion')),
-    h('div', { class: 'searchbar' }, icon('search', 18), input), results,
+    h('div', { class: 'searchbar' }, icon('search', 18), input),
+    h('button', { class: 'btn group-new', type: 'button', onclick: () => Piaf.go('#/g/new') }, icon('users', 18), ' Nouveau groupe'), results,
     h('div', { class: 'me-id' }, h('span', { class: 'muted small' }, 'Votre identifiant'), h('strong', null, fmt.id8(S.me.public_id)), h('button', { class: 'link-btn', type: 'button', onclick: () => copyText(S.me.public_id) }, 'Copier')));
   return { el, mounted() { input.focus(); } };
 };

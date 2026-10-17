@@ -149,17 +149,41 @@ async function deleteAccount(req: Request, b: any) {
   const r = await verify(id, String(b.password ?? ""), await ipHash(req));
   if (r.err) return r.err;
 
-  // 1) supprimer réellement tous les fichiers des conversations de la personne ; en cas d'échec on s'arrête (rien n'est perdu à moitié).
-  const { data: convs } = await admin.from("conversations").select("id").or(`user_a.eq.${u.user.id},user_b.eq.${u.user.id}`);
-  const ids = (convs ?? []).map((c) => c.id);
-  if (ids.length) {
-    const { data: files } = await admin.from("media").select("path").in("conversation_id", ids).neq("status", "deleted");
-    const paths = (files ?? []).map((f) => f.path);
+  // 1) supprimer réellement les fichiers : tous ceux des discussions à deux (elles disparaissent avec le compte),
+  //    et seulement ceux envoyés par cette personne dans les groupes (le groupe continue d'exister) ; en cas d'échec on s'arrête.
+  const { data: mems } = await admin.from("conversation_members").select("conversation_id, conversations(kind)").eq("user_id", u.user.id);
+  const rel = (mems ?? []).map((m: any) => ({ id: m.conversation_id, kind: Array.isArray(m.conversations) ? m.conversations[0]?.kind : m.conversations?.kind }));
+  const directIds = rel.filter((x) => x.kind === "direct").map((x) => x.id);
+  const allGroupIds = rel.filter((x) => x.kind === "group").map((x) => x.id);
+  const solo: string[] = [];   // groupes dont cette personne est la dernière : ils disparaissent entièrement avec elle
+  for (const gid of allGroupIds) {
+    const { count } = await admin.from("conversation_members").select("user_id", { count: "exact", head: true }).eq("conversation_id", gid);
+    if (count === 1) solo.push(gid);
+  }
+  const groupIds = allGroupIds.filter((g) => !solo.includes(g));
+  const removeAll = async (paths: string[]) => {
     for (let i = 0; i < paths.length; i += 100) {
       const { error } = await admin.storage.from("chat-media").remove(paths.slice(i, i + 100));
-      if (error) { console.error("storage cleanup", error.message); return json(502, { error: "storage_cleanup_failed" }); }
+      if (error) { console.error("storage cleanup", error.message); return false; }
     }
+    return true;
+  };
+  const wipeIds = [...directIds, ...solo];
+  if (wipeIds.length) {
+    const { data: files } = await admin.from("media").select("path").in("conversation_id", wipeIds).neq("status", "deleted");
+    if (!(await removeAll((files ?? []).map((f) => f.path)))) return json(502, { error: "storage_cleanup_failed" });
   }
+  if (groupIds.length) {
+    const { data: mine } = await admin.from("media").select("id,path,status").in("conversation_id", groupIds).eq("uploader_id", u.user.id).neq("status", "deleted");
+    for (const f of mine ?? []) if (f.status === "ready") await admin.rpc("media_begin_delete", { p_user: u.user.id, p_id: f.id });
+    if (!(await removeAll((mine ?? []).map((f) => f.path)))) return json(502, { error: "storage_cleanup_failed" });
+    for (const f of mine ?? []) await admin.rpc("media_mark_removed", { p_id: f.id });   // libère le quota du groupe
+  }
+  for (const gid of solo) {
+    const { data: gav } = await admin.storage.from("avatars").list(gid);
+    if (gav?.length) await admin.storage.from("avatars").remove(gav.map((f) => `${gid}/${f.name}`));
+  }
+  if (solo.length) await admin.from("conversations").delete().in("id", solo);
   // 1b) photos de profil de la personne
   const { data: av } = await admin.storage.from("avatars").list(u.user.id);
   if (av?.length) await admin.storage.from("avatars").remove(av.map((f) => `${u.user.id}/${f.name}`));

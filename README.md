@@ -15,14 +15,15 @@ Le code de l'application, le schéma SQL, les politiques de sécurité et les Ed
 - Statuts : en cours, envoyé, distribué, lu (avec heure), échec + réessai ; confirmations de lecture désactivables (réciproque).
 - Photos et vidéos : envoi groupé avec aperçu, progression, annulation, visionneuse, téléchargement, galerie avec quota, suppression pour moi / pour tous (suppression réelle du fichier).
 - Photo de profil (recadrée en carré 256 px côté appareil, JPEG, bucket privé visible seulement par soi et ses contacts de conversation) ; supprimée avec le compte.
+- Groupes (2 à 32 personnes) : création depuis ses discussions et groupes communs, rôles administrateur/membre, ajout/retrait, départ, photo et nom du groupe, historique masqué aux nouveaux arrivants, accusés « lu par N/M », suppression par un administrateur, quota de médias par groupe. **Écrits, non testés de bout en bout.**
 - Blocage, signalement, thème clair/sombre, notifications locales (application ouverte ou en arrière-plan).
 
 ### Non terminé / limites connues
 - **Pas de notifications push application fermée** (nécessiterait Web Push + clés VAPID + une fonction serveur). Les notifications actuelles fonctionnent tant que l'application est ouverte ou en arrière-plan. Sur iPhone, installer d'abord l'application sur l'écran d'accueil (iOS 16.4+).
 - Pas de vignettes serveur : les galeries chargent les fichiers d'origine (la transformation d'images est une fonction payante de Supabase).
 - Le transfert de médias n'est pas disponible (seuls les messages texte se transfèrent).
-- Pas de groupes (le schéma est limité à deux personnes par conversation ; à faire évoluer pour les groupes).
 - Pas de chiffrement de bout en bout. Pas d'export de données. Pas d'analyse antivirus ou de contenu des fichiers.
+- Groupes : un membre retiré garde l'accès à un fichier déjà ouvert pendant 10 minutes au plus (liens signés) ; les accusés « lu par N/M » se rafraîchissent toutes les 20 secondes (pas en temps réel) ; un événement de suppression d'appartenance est diffusé en temps réel sans filtrage (identifiants techniques seulement).
 - La suppression d'une réaction est diffusée en temps réel sans filtrage par la RLS (limite de Supabase Realtime pour les suppressions) : seules deux clés techniques (id du message, id de l'utilisateur) sont concernées.
 - Les réservations de médias abandonnées (téléphone coupé en plein envoi) sont nettoyées à l'ouverture de l'application, pas par une tâche planifiée.
 
@@ -40,6 +41,7 @@ supabase/migrations/003_security.sql    RLS, privilèges, bucket privé, temps r
 supabase/migrations/004_signup_gate.sql  correctif : contrôle d'inscription par jeton secret
 supabase/migrations/005_find_user_exact.sql  recherche par identifiant exact
 supabase/migrations/006_avatars.sql      photos de profil
+supabase/migrations/007_groups.sql       groupes
 PLAN_GROUPES.md      plan de la gestion des groupes (non implémentée)
 supabase/functions/auth/                inscription, connexion, suppression de compte
 supabase/functions/media/               finalisation d'envoi, suppression réelle, nettoyage

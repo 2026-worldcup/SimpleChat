@@ -82,6 +82,23 @@ Deno.serve(async (req) => {
       return json(200, { cleaned, failed });
     }
 
+    if (b.action === "delete_group") { // dernière personne restante : suppression complète du groupe (messages, fichiers, photo)
+      const id = String(b.id ?? "");
+      const { data: mem } = await admin.from("conversation_members").select("user_id").eq("conversation_id", id);
+      const { data: c } = await admin.from("conversations").select("kind").eq("id", id).maybeSingle();
+      if (!c || c.kind !== "group" || !mem || mem.length !== 1 || mem[0].user_id !== uid) return json(403, { error: "forbidden" });
+      const { data: files } = await admin.from("media").select("path").eq("conversation_id", id).neq("status", "deleted");
+      const paths = (files ?? []).map((f) => f.path);
+      for (let i = 0; i < paths.length; i += 100) {
+        const { error } = await admin.storage.from(BUCKET).remove(paths.slice(i, i + 100));
+        if (error) { console.error("group cleanup", error.message); return json(502, { error: "delete_failed" }); }
+      }
+      const { data: av } = await admin.storage.from("avatars").list(id);
+      if (av?.length) await admin.storage.from("avatars").remove(av.map((f) => `${id}/${f.name}`));
+      const { error } = await admin.from("conversations").delete().eq("id", id);
+      return error ? json(500, { error: "server_error" }) : json(200, { ok: true });
+    }
+
     return json(400, { error: "bad_request" });
   } catch (e) {
     console.error(e);
