@@ -7,7 +7,7 @@ alter table public.conversations
   add column title text check (title is null or char_length(btrim(title)) between 1 and 40),
   add column avatar_path text;
 alter table public.conversations alter column user_a drop not null, alter column user_b drop not null;
-alter table public.conversations add constraint conversations_kind_check check (
+alter table public.conversations add constraint conversations_shape_check check (
   (kind = 'direct' and user_a is not null and user_b is not null)
   or (kind = 'group' and user_a is null and user_b is null and title is not null));
 
@@ -485,3 +485,10 @@ grant execute on function
   public.leave_group(uuid), public.group_set_admin(uuid, uuid, boolean), public.group_rename(uuid, text),
   public.group_set_avatar(uuid, text)
   to authenticated;
+
+-- Durcissement : fonctions internes non appelables par les clients ; aucune exécution anonyme.
+revoke all on function public._sys(uuid, uuid, text), public.ensure_group_admin() from public, anon, authenticated;
+revoke all on function public.is_group_admin(uuid), public.list_conversations(), public.my_contacts(), public.group_members(uuid),
+  public.create_group(text, uuid[]), public.group_add_members(uuid, uuid[]), public.group_remove_member(uuid, uuid),
+  public.leave_group(uuid), public.group_set_admin(uuid, uuid, boolean), public.group_rename(uuid, text),
+  public.group_set_avatar(uuid, text) from public, anon;

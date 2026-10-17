@@ -15,7 +15,7 @@ Le code de l'application, le schéma SQL, les politiques de sécurité et les Ed
 - Statuts : en cours, envoyé, distribué, lu (avec heure), échec + réessai ; confirmations de lecture désactivables (réciproque).
 - Photos et vidéos : envoi groupé avec aperçu, progression, annulation, visionneuse, téléchargement, galerie avec quota, suppression pour moi / pour tous (suppression réelle du fichier).
 - Photo de profil (recadrée en carré 256 px côté appareil, JPEG, bucket privé visible seulement par soi et ses contacts de conversation) ; supprimée avec le compte.
-- Groupes (2 à 32 personnes) : création depuis ses discussions et groupes communs, rôles administrateur/membre, ajout/retrait, départ, photo et nom du groupe, historique masqué aux nouveaux arrivants, accusés « lu par N/M », suppression par un administrateur, quota de médias par groupe. **Écrits, non testés de bout en bout.**
+- Groupes (2 à 32 personnes) : création depuis ses discussions et groupes communs, rôles administrateur/membre, ajout/retrait, départ, photo et nom du groupe, historique masqué aux nouveaux arrivants, accusés « lu par N/M », suppression par un administrateur, quota de médias par groupe. **Testés côté base de données ; interface et fonctions serveur non testées de bout en bout.**
 - Blocage, signalement, thème clair/sombre, notifications locales (application ouverte ou en arrière-plan).
 
 ### Non terminé / limites connues
@@ -41,8 +41,9 @@ supabase/migrations/003_security.sql    RLS, privilèges, bucket privé, temps r
 supabase/migrations/004_signup_gate.sql  correctif : contrôle d'inscription par jeton secret
 supabase/migrations/005_find_user_exact.sql  recherche par identifiant exact
 supabase/migrations/006_avatars.sql      photos de profil
-supabase/migrations/007_groups.sql       groupes
-PLAN_GROUPES.md      plan de la gestion des groupes (non implémentée)
+supabase/migrations/007_groups.sql       groupes (contrainte appliquée sous le nom conversations_shape_check)
+supabase/migrations/008_group_history_rls.sql  historique des groupes masqué aussi au niveau des tables
+PLAN_GROUPES.md      plan de la gestion des groupes
 supabase/functions/auth/                inscription, connexion, suppression de compte
 supabase/functions/media/               finalisation d'envoi, suppression réelle, nettoyage
 ```
@@ -91,6 +92,9 @@ Dépôt → Settings → Pages → *Deploy from a branch* → `main` / racine. L
 
 ### Exécutés (16/10/2026, base de données Supabase, comptes fictifs, tout annulé ensuite)
 Réussis : inscription directe refusée ; création automatique des profils ; recherche par identifiant ; création de conversation (idempotente) ; un tiers ne voit ni conversations, ni messages, ni ne peut écrire dans la conversation ; écriture directe dans les tables refusée ; modification et suppression « pour tous » refusées à qui n'est pas l'auteur, acceptées pour l'auteur ; réservation photo valide ; photo > 10 Mo, vidéo > 25 Mo, PDF, SVG, plus de 10 fichiers refusés ; réservation par un tiers refusée ; 3 vidéos de 25 Mo acceptées puis dépassement des 100 Mo refusé (quota exact) ; envoi refusé après blocage. Vérification de sécurité Supabase : aucun problème critique (les avertissements listés concernent les fonctions volontairement appelables par les utilisateurs connectés, qui vérifient elles-mêmes l'identité).
+
+### Groupes (17/10/2026, base de données, comptes fictifs, tout annulé ensuite)
+Réussis : création avec personnes issues de ses discussions ; candidat sans conversation commune refusé ; candidat bloqué refusé (création et ajout) ; non-membre : ni lecture, ni envoi, ni liste des membres ; ajout/renommage/promotion réservés aux administrateurs ; seul le créateur peut retirer ou rétrograder un administrateur ; suppression « pour tous » d'un message par un administrateur, refusée à un simple membre ; accusés de lecture visibles ; retiré ou parti : plus d'accès ni d'envoi ; transfert automatique du rôle d'administrateur au départ du dernier ; dernier membre ne peut pas quitter (il supprime le groupe). **Défaut trouvé** : l'historique antérieur à l'arrivée n'était masqué que dans la vue de l'application, pas au niveau des tables → correctif 008. Aucune fonction n'est appelable sans connexion.
 
 ### Non exécutés
 Tout ce qui passe par le navigateur ou les Edge Functions (l'environnement de développement ne pouvait pas les appeler) : inscription et connexion réelles, persistance de session, verrouillage après essais ratés, envoi réel de fichiers et contrôle de leur taille réelle, téléchargement sans effet sur le quota, suppression réelle d'un fichier et libération du quota, accès aux fichiers par un tiers, temps réel, accusés de lecture à l'écran, coupure réseau, écran étroit avec clavier, GitHub Pages en sous-répertoire. Non testables sans appareil réel : clavier virtuel iOS/Android, notifications, installation PWA, lecture HEIC/MOV.
