@@ -40,9 +40,10 @@ Deno.serve(async (req) => {
   try {
     if (b.action === "finalize") {
       const ids: string[] = Array.isArray(b.ids) ? b.ids.slice(0, 10).map(String) : [];
-      const { data: cfg } = await admin.from("app_config").select("key,value").in("key", ["photo_max_bytes", "video_max_bytes"]);
-      const limit: Record<string, number> = { photo: 0, video: 0 };
-      for (const c of cfg ?? []) limit[c.key === "photo_max_bytes" ? "photo" : "video"] = Number(c.value);
+      const { data: cfg } = await admin.from("app_config").select("key,value").in("key", ["photo_max_bytes", "video_max_bytes", "audio_max_bytes"]);
+      const limit: Record<string, number> = { photo: 0, video: 0, audio: 10485760 };
+      const KEY: Record<string, string> = { photo_max_bytes: "photo", video_max_bytes: "video", audio_max_bytes: "audio" };
+      for (const c of cfg ?? []) if (KEY[c.key]) limit[KEY[c.key]] = Number(c.value);
 
       const results = [];
       for (const id of ids) {
@@ -50,7 +51,7 @@ Deno.serve(async (req) => {
         if (!m || m.uploader_id !== uid || m.status !== "pending") { results.push({ id, ok: false, error: "not_found" }); continue; }
         const { data: size } = await admin.rpc("media_object_size", { p_path: m.path });
         if (size == null) { results.push({ id, ok: false, error: "upload_missing" }); continue; }
-        if (Number(size) > limit[m.kind]) { await purge(m.id, m.path); results.push({ id, ok: false, error: "file_too_large" }); continue; }
+        if (Number(size) > (limit[m.kind] ?? 0)) { await purge(m.id, m.path); results.push({ id, ok: false, error: "file_too_large" }); continue; }
         const { error } = await admin.rpc("media_finalize", { p_user: uid, p_id: id, p_actual: Number(size) });
         if (error) { await purge(m.id, m.path); results.push({ id, ok: false, error: error.message }); continue; }
         results.push({ id, ok: true });

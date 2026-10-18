@@ -47,6 +47,9 @@ const ICONS = {
   edit: '<path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>', user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   film: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M10 9l5 3-5 3z"/>', eye: '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/>',
   bubble: '<path d="M21 12a8 8 0 0 1-11.7 7.1L3 21l1.9-6.3A8 8 0 1 1 21 12z"/>', down: '<path d="M6 9l6 6 6-6"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>', pause: '<path d="M8 5v14M16 5v14"/>',
+  poll: '<path d="M5 20V10M12 20V4M19 20v-7"/>', list: '<path d="M9 6h12M9 12h12M9 18h12M3.5 6l1 1 2-2M3.5 12l1 1 2-2M3.5 18l1 1 2-2"/>',
+  music: '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>', at: '<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.9 7.9"/>',
 };
 function icon(name, size = 22) {
   const s = h('span', { class: 'ico', 'aria-hidden': 'true' });
@@ -234,6 +237,10 @@ function startRealtime() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'media' }, on('media', 'media'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, on('conversations', 'conv'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'conversation_members' }, on('members', 'member'))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'polls' }, on('polls', 'poll'))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'poll_options' }, on('poll_options', 'poll'))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'todo_lists' }, on('todo_lists', 'todo'))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'todo_items' }, on('todo_items', 'todo'))
     .subscribe((status) => {
       S.rt = status; bus.emit('net');
       if (status === 'SUBSCRIBED') { if (everSubscribed) bus.emit('resync'); everSubscribed = true; if (S.me) rpc('mark_delivered_all').catch(() => {}); }
@@ -251,6 +258,7 @@ Piaf.sweepMedia = sweepMedia;
 let convTimer = null;
 async function refreshConvs() {
   S.convs = await rpc('list_conversations');
+  try { S.mentions = Object.fromEntries((await rpc('my_unread_mentions')).map((r) => [r.conversation_id, r.n])); } catch { S.mentions = {}; } // nécessite la migration 009
   S.convsLoaded = true;
   bus.emit('convs');
   loadAvatars().catch(() => {});
@@ -262,7 +270,7 @@ async function loadAvatars() {
   for (const r of rows) if ((S.avatars[r.id] || null) !== (r.avatar_path || null)) { S.avatars[r.id] = r.avatar_path; changed = true; }
   if (changed) bus.emit('convs');
 }
-// Cadrage de la photo : la personne déplace et zoome l'image dans un cadre carré, le résultat est un JPEG 256×256
+// Cadrage de la photo : la personne déplace et zoome l'image dans un cadre carré, le résultat est un petit JPEG 176×176 (qualité réduite pour économiser le stockage)
 // (les métadonnées de l'original ne sont jamais envoyées). Renvoie le JPEG, ou null si la personne annule.
 Piaf.cropPhoto = async (file, round = true) => {
   if (!/^image\//.test(file.type)) throw new PiafError('bad_type');
@@ -297,8 +305,8 @@ Piaf.cropPhoto = async (file, round = true) => {
         h('p', { class: 'muted small' }, 'Faites glisser la photo avec le doigt, et utilisez le curseur (ou pincez) pour zoomer.')],
       actions: [{ label: 'Annuler', onClick: () => fin(null) },
         { label: 'Valider', primary: true, onClick: async () => {
-          const c = document.createElement('canvas'); c.width = c.height = 256; paint(c.getContext('2d'), 256);
-          const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85)); if (!blob) { toast(errText(new PiafError('bad_image')), { error: true }); return false; }
+          const c = document.createElement('canvas'); c.width = c.height = 176; paint(c.getContext('2d'), 176);
+          const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.6)); if (!blob) { toast(errText(new PiafError('bad_image')), { error: true }); return false; }
           fin(blob); } }] });
     const orig = l.close; l.close = () => { fin(null); orig(); };
   });

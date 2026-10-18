@@ -170,9 +170,10 @@
   // ---------------------------------------------------------------- écran de discussion (mêmes composants que les autres discussions)
   const safeUrl = (u) => { try { const x = new URL(u); return x.protocol === 'https:' || x.protocol === 'http:' ? x.href : null; } catch { return null; } };
   function inline(text) { // **gras** uniquement ; tout le reste est du texte brut (aucun HTML)
-    const out = []; String(text).split(/\*\*(.+?)\*\*/gs).forEach((t, i) => { if (t) out.push(i % 2 ? h('strong', null, t) : document.createTextNode(t)); });
+    const out = []; String(text).split(/\*\*(.+?)\*\*/gs).forEach((t, i) => { if (t) { if (i % 2) out.push(h('strong', null, t)); else out.push(...P.linkify(t)); } });
     return out;
   }
+  P.assistantInline = inline;
   const sameGroup = (a, b) => a && b && a.role === b.role && fmt.dayKey(a.at) === fmt.dayKey(b.at) && Math.abs(new Date(b.at) - new Date(a.at)) < 300000;
 
   // ---------------------------------------------------------------- @talk2piaf dans les autres discussions (réponse locale, visible par la personne qui l'appelle)

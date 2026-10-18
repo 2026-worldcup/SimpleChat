@@ -168,3 +168,50 @@ input[type=text], input[type=password], input[type=search], input:not([type]), t
 .bubble.whisper { border-style: dashed; } .t2p-name { color: var(--accent, #c2410c); }
 
 .conv-top > *, .conv-bot > * { min-width: 0; } .conv-prev { display: block; min-width: 0; }
+
+/* ---- mentions : nom coloré sans « @ », signal fort pour la personne mentionnée, suivi de lecture pour l'expéditeur ---- */
+.mention { padding: 0 3px; }
+.bubble.mentioned-me { border-color: var(--accent); box-shadow: inset 4px 0 0 var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--theirs)); }
+.mention-flag { display: flex; align-items: center; gap: 4px; font-size: .78rem; font-weight: 700; color: var(--accent); margin-bottom: 2px; }
+.mention-seen { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; margin-top: 3px; font-size: .76rem; color: var(--muted); }
+.mention-seen .ms.ok { color: var(--ok); font-weight: 600; }
+.badge.at { background: var(--accent-soft); color: var(--accent); min-width: 22px; }
+
+/* ---- sélection multiple ---- */
+.bubble { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.selbar { gap: 4px; } .selbar .sel-count { flex: 1; font-size: 1.05rem; }
+.icon-btn:disabled { opacity: .35; }
+.bubble.selected { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---- assistant public, formulaires, sondages, listes, audio ---- */
+.bubble.assistant { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.form-stack { display: grid; gap: 4px; } .chk-group { display: grid; gap: 8px; margin: 6px 0 12px; }
+.chk { display: flex; align-items: flex-start; gap: 10px; min-height: 36px; } .chk input { width: 22px; height: 22px; margin: 1px 0 0; accent-color: var(--accent); flex: none; } .chk small { display: block; }
+.opt-list { display: grid; gap: 8px; margin-bottom: 8px; } .opt-row { display: flex; align-items: center; gap: 4px; } .opt-row input { flex: 1; }
+input[type=datetime-local] { width: 100%; min-height: var(--tap); padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.form-error { color: var(--danger); } textarea { font: inherit; }
+.poll, .todo { display: grid; gap: 6px; width: min(68vw, 290px); max-width: 100%; padding: 2px 0; }
+.poll-q, .todo-head { display: flex; align-items: center; gap: 8px; } .todo-head strong, .poll-q strong { flex: 1; } .poll-tags { margin-top: -2px; }
+.poll-opt { position: relative; display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); text-align: left; overflow: hidden; }
+.poll-opt.on { border-color: var(--accent); } .poll-opt:disabled { opacity: .85; cursor: default; }
+.poll-bar { position: absolute; left: 0; bottom: 0; height: 4px; width: 100%; background: transparent; } .poll-bar i { display: block; height: 100%; background: var(--accent); opacity: .7; transition: width .2s; }
+.poll-mark { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--muted); display: grid; place-items: center; color: var(--accent-ink); } .poll-mark.sq { border-radius: 5px; }
+.poll-opt.on .poll-mark { background: var(--accent); border-color: var(--accent); } .poll-label { flex: 1; } .poll-count { font-weight: 700; }
+.poll-voters { padding: 0 4px; } .poll-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.todo-prog { height: 4px; } .todo-item { display: flex; align-items: flex-start; gap: 8px; }
+.todo-check { flex: none; width: 28px; height: 28px; margin-top: 4px; border-radius: 8px; border: 2px solid var(--muted); background: var(--surface); display: grid; place-items: center; color: var(--accent-ink); padding: 0; }
+.todo-item.done .todo-check { background: var(--accent); border-color: var(--accent); } .todo-check:disabled { opacity: .6; }
+.todo-text { flex: 1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-height: 36px; padding: 6px 2px; border: 0; background: none; text-align: left; } .todo-text:disabled { opacity: 1; cursor: default; }
+.todo-item.done .todo-text > span:first-child { text-decoration: line-through; color: var(--muted); }
+.todo-who { font-size: .76rem; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 8px; padding: 0 6px; } .todo-by { font-size: .74rem; }
+.audio { display: flex; align-items: center; gap: 10px; width: min(66vw, 260px); max-width: 100%; }
+.au-play { flex: none; width: 42px; height: 42px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; padding: 0; }
+.au-main { flex: 1; min-width: 0; display: grid; gap: 2px; } .au-bar { width: 100%; accent-color: var(--accent); margin: 0; }
+.au-meta { display: flex; align-items: center; gap: 8px; } .au-name { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.au-speed { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 0 8px; min-height: 26px; font-size: .75rem; font-weight: 700; }
+.recbar { display: flex; align-items: center; gap: 10px; padding: 6px 8px; } .rec-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--danger); animation: recblink 1s infinite; }
+@keyframes recblink { 50% { opacity: .25; } } .rec-time { font-variant-numeric: tabular-nums; font-weight: 700; } .rec-hint { flex: 1; }
+.tile.audio-tile { display: grid; place-items: center; gap: 4px; padding: 6px; background: var(--surface2); } .tile.audio-tile .tile-name { font-size: .7rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .rec-dot { animation: none; } }
+
+.poll-foot .link-btn { white-space: nowrap; padding: 8px 4px; font-size: .9rem; }

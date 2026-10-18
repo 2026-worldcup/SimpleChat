@@ -8,12 +8,14 @@ const PAGE = 40;
 const whispers = new Map(); // réponses locales de Talk2Piaf par discussion : jamais envoyées, perdues à la fermeture de l'application
 const T2P_RE = /(^|\s)@talk2piaf(?![\p{L}\p{N}_])/iu, T2P_RE_G = /(^|\s)@talk2piaf(?![\p{L}\p{N}_])/giu;
 Piaf.mentionsMe = (body) => { const n = S.me && S.me.display_name; return !!(n && body && new RegExp('(^|\\s)@' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\p{L}\\p{N}_])', 'iu').test(body)); };
+const MEDIA_COLS = 'id,message_id,name,mime,kind,size_bytes,path,created_at,uploader_id';
+let mediaCols = MEDIA_COLS + ',duration_ms'; // la colonne duration_ms n'existe qu'après la migration 009
 const COLS = 'id,conversation_id,sender_id,client_id,kind,body,reply_to,forwarded,created_at,edited_at,deleted_at,pinned_at,delivered_at,read_at';
 const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
-const MIME_BY_EXT = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', heic: 'image/heic', heif: 'image/heif', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime' };
+const MIME_BY_EXT = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', heic: 'image/heic', heif: 'image/heif', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime', mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', oga: 'audio/ogg', wav: 'audio/wav' };
 const OK_MIME = new Set(Object.values(MIME_BY_EXT));
 const mimeOf = (f) => (OK_MIME.has(f.type) ? f.type : MIME_BY_EXT[(f.name.split('.').pop() || '').toLowerCase()] || f.type || '');
-const kindOf = (mime) => (mime.startsWith('image/') ? 'photo' : 'video');
+const kindOf = (mime) => (mime.startsWith('image/') ? 'photo' : mime.startsWith('audio/') ? 'audio' : 'video');
 const hueOf = (id) => { let x = 0; for (const ch of String(id)) x = (x * 31 + ch.charCodeAt(0)) >>> 0; return x % 360; };
 const esc = (s) => s.replace(/[\\%_]/g, (c) => '\\' + c);
 
@@ -96,6 +98,9 @@ Piaf.views.chat = (route) => {
   let conv = Piaf.conv(convId), destroyed = false, loading = false, hasMore = true, atBottom = true, newCount = 0, mediaBytes = 0;
   const msgs = new Map(), clientIds = new Set(), reactions = new Map(), mediaOf = new Map(), replies = new Map(), pins = new Map(), nodes = new Map();
   let replyTo = null, editing = null, tray = [], uploads = [], searchOpen = false, markTimer = null;
+  let selMode = false, sel = new Set(), recorder = null, extTimer = null;
+  const ext = () => Piaf.ext;
+  const ctx = { convId, rerender: () => render(), isAdmin: () => isAdmin(), isGroup: () => isGroup(), nameOf: (id) => senderName(id), members: () => members };
   const draftKey = 'piaf-draft:' + convId;
   const name = () => (conv ? Piaf.convName(conv) : 'Discussion');
   const cfg = () => S.cfg;
@@ -124,12 +129,17 @@ Piaf.views.chat = (route) => {
   const ta = h('textarea', { rows: '1', placeholder: 'Message', 'aria-label': 'Écrire un message', maxlength: '4000', enterkeyhint: 'enter', oninput: onInput, onclick: () => updateMentions(), onkeyup: (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') updateMentions(); }, onkeydown: (e) => {
     if (mentionKey(e)) return;
     if (e.key === 'Enter' && !e.shiftKey && matchMedia('(pointer:fine)').matches) { e.preventDefault(); sendText(); } } });
+  const audioInput = h('input', { type: 'file', multiple: true, accept: 'audio/mpeg,audio/mp4,audio/aac,audio/ogg,audio/webm,audio/wav,.mp3,.m4a,.aac,.ogg,.oga,.wav', hidden: true, onchange: () => { addFiles([...audioInput.files]); audioInput.value = ''; } });
   const fileInput = h('input', { type: 'file', multiple: true, accept: 'image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,video/mp4,video/webm,video/quicktime', hidden: true, onchange: () => { addFiles([...fileInput.files]); fileInput.value = ''; } });
   const sendBtn = h('button', { class: 'send', type: 'button', 'aria-label': 'Envoyer', onclick: sendText }, icon('send', 22));
+  const micBtn = h('button', { class: 'send mic', type: 'button', 'aria-label': 'Enregistrer un message vocal', onclick: () => startRecord() }, icon('mic', 22));
+  function syncSend() { const has = !!ta.value.trim() || !!editing, canMic = !!(Piaf.ext && Piaf.ext.canRecord()); sendBtn.hidden = !has && canMic; micBtn.hidden = has || !canMic; }
+  let composerRow = null;
   const composer = h('div', { class: 'composer' }, mentionPop, replyBar, trayEl, uploadsEl,
-    h('div', { class: 'composer-row' }, iconBtn('clip', 'Joindre des photos ou vidéos', () => fileInput.click()), ta, sendBtn, fileInput));
+    composerRow = h('div', { class: 'composer-row' }, iconBtn('clip', 'Joindre un fichier, un sondage ou une liste', () => attachMenu()), ta, sendBtn, micBtn, fileInput, audioInput));
+  const selBar = h('header', { class: 'topbar selbar', hidden: true });
   const searchPanel = h('div', { class: 'searchpanel', hidden: true });
-  const el = h('div', { class: 'screen chat' }, header, banner, searchPanel, h('div', { class: 'msgs-wrap' }, scroller, pill), composer);
+  const el = h('div', { class: 'screen chat' }, header, selBar, banner, searchPanel, h('div', { class: 'msgs-wrap' }, scroller, pill), composer);
 
   // ------------------------------------------------ en-tête / blocage
   function drawHeader() {
@@ -137,7 +147,7 @@ Piaf.views.chat = (route) => {
       h('span', { class: 'muted small' }, conv ? (isGroup() ? conv.members + ' membres' : conv.blocked_by_me ? 'Contact bloqué' : 'Identifiant ' + fmt.id8(conv.other_public_id)) : '…')));
     const blocked = conv?.blocked_by_me;
     composer.classList.toggle('blocked', !!blocked);
-    ta.disabled = !!blocked; sendBtn.disabled = !!blocked;
+    ta.disabled = !!blocked; sendBtn.disabled = !!blocked; micBtn.disabled = !!blocked;
     ta.placeholder = blocked ? 'Contact bloqué' : 'Message';
   }
   function drawBanner() {
@@ -147,16 +157,18 @@ Piaf.views.chat = (route) => {
     banner.replaceChildren(icon('pin', 18), h('button', { type: 'button', class: 'pin-text', onclick: () => jumpTo(p.id) }, h('strong', null, arr.length > 1 ? `Épinglé (${arr.length})` : 'Épinglé'), h('span', null, snippet(p))));
   }
   let pinIdx = 0;
-  const snippet = (m) => (m.deleted_at ? 'Message supprimé' : m.kind === 'media' ? '📎 Média' : (m.body || '').slice(0, 90));
+  const snippet = (m) => (m.deleted_at ? 'Message supprimé' : m.kind === 'media' ? (mediaOf.get(m.id)?.kind === 'audio' ? '🎤 Audio' : '📎 Média') : m.kind === 'poll' ? '📊 ' + (m.body || '').slice(0, 80) : m.kind === 'todo' ? '✅ ' + (m.body || '').slice(0, 80) : (m.body || '').replace(/\*\*/g, '').slice(0, 90));
 
   // ------------------------------------------------ données
   async function hydrate(rows) {
     const ids = rows.map((r) => r.id), mids = rows.filter((r) => r.kind === 'media').map((r) => r.id);
     const missing = [...new Set(rows.map((r) => r.reply_to).filter((x) => x && !msgs.has(x) && !replies.has(x)))];
+    const needExt = rows.some((r) => r.kind === 'poll' || r.kind === 'todo');
     const [media, reacts, rep] = await Promise.all([
-      mids.length ? api.q(sb.from('my_media').select('id,message_id,name,mime,kind,size_bytes,path,created_at,uploader_id').in('message_id', mids)) : [],
+      mids.length ? api.q(sb.from('my_media').select(mediaCols).in('message_id', mids)).catch(() => { if (mediaCols === MEDIA_COLS) throw new PiafError('network'); mediaCols = MEDIA_COLS; return api.q(sb.from('my_media').select(mediaCols).in('message_id', mids)); }) : [],
       ids.length ? api.q(sb.from('reactions').select('message_id,user_id,emoji').in('message_id', ids)) : [],
       missing.length ? api.q(sb.from('my_messages').select('id,sender_id,kind,body,deleted_at').in('id', missing)) : [],
+      needExt ? ext().load(convId) : null,
     ]);
     for (const m of media) mediaOf.set(m.message_id, m);
     for (const id of ids) reactions.set(id, reacts.filter((r) => r.message_id === id));
@@ -219,7 +231,7 @@ Piaf.views.chat = (route) => {
       const prev = all[i - 1], next = all[i + 1];
       if (!prev || fmt.dayKey(prev.created_at) !== fmt.dayKey(m.created_at)) frag.push(h('div', { class: 'day', role: 'separator' }, h('span', null, fmt.dayLabel(m.created_at))));
       const first = !sameGroup(prev, m), last = !sameGroup(m, next);
-      const sig = JSON.stringify([m.body, m.edited_at, m.deleted_at, m.pinned_at, m.read_at, m._out && [m._out.status, m._out.err], first, last, reactions.get(m.id), mediaOf.get(m.id)?.id, replySig(m), S.settings.read_receipts, name(), isGroup() && membersVer, m.kind, m.r && [m.r.text, m.r.acts.map((a) => !!a.done), i === all.length - 1]]);
+      const sig = JSON.stringify([m.body, m.edited_at, m.deleted_at, m.pinned_at, m.read_at, m._out && [m._out.status, m._out.err], first, last, reactions.get(m.id), mediaOf.get(m.id)?.id, replySig(m), S.settings.read_receipts, name(), isGroup() && membersVer, m.kind, selMode && sel.has(m.id), selMode, ext().sig(m, ctx), mentionSig(m), m.r && [m.r.text, m.r.acts.map((a) => !!a.done), i === all.length - 1]]);
       let n = nodes.get(m.id); if (!n || n._sig !== sig) { n = buildMsg(m, first, last, i === all.length - 1); n._sig = sig; nodes.set(m.id, n); }
       frag.push(n);
     });
@@ -243,7 +255,10 @@ Piaf.views.chat = (route) => {
   function buildMsg(m, first, last, isLast) {
     if (m.kind === 't2p') return Piaf.assistantBubble(m.r, { time: m.at, showChips: isLast, onAct: (j, btn) => runWhisperAct(m, j, btn), onChip: (t) => askAssistant(t, m.id), onMenu: () => whisperMenu(m) });
     if (m.kind === 'system') return h('div', { class: 'sysmsg', role: 'listitem', 'data-id': m.id }, h('span', null, m.body));
+    if (m.kind === 'assistant' && !m.deleted_at) return buildAssistantMsg(m);
     const mine = m.sender_id === me(), del = !!m.deleted_at, parts = [];
+    const mentionedMe = !mine && !del && m.kind === 'text' && Piaf.mentionsMe(m.body);
+    if (mentionedMe) parts.push(h('div', { class: 'mention-flag' }, icon('at', 13), ' Vous avez été mentionné(e)'));
     if (isGroup() && !mine && first && !del) parts.push(h('div', { class: 'sender', style: { color: `hsl(${hueOf(m.sender_id)} 60% 52%)` } }, senderName(m.sender_id)));
     if (m.forwarded && !del) parts.push(h('div', { class: 'fwd' }, icon('fwd', 13), ' Transféré'));
     if (m.reply_to && !del) {
@@ -252,17 +267,44 @@ Piaf.views.chat = (route) => {
     }
     if (del) parts.push(h('div', { class: 'text tomb' }, m.kind === 'media' ? 'Ce média a été supprimé' : 'Ce message a été supprimé'));
     else if (m.kind === 'media') parts.push(mediaBlock(m));
+    else if (m.kind === 'poll') parts.push(ext().pollBlock(m, ctx));
+    else if (m.kind === 'todo') parts.push(ext().todoBlock(m, ctx));
     else parts.push(h('div', { class: 'text' }, richText(m.body || '')));
-    if (m.kind === 'media' && !del && mediaOf.get(m.id)) { const d = mediaOf.get(m.id); parts.push(h('div', { class: 'cap' }, `${d.name} · ${fmt.size(d.size_bytes)}`)); }
+    if (m.kind === 'media' && !del && mediaOf.get(m.id) && mediaOf.get(m.id).kind !== 'audio') { const d = mediaOf.get(m.id); parts.push(h('div', { class: 'cap' }, `${d.name} · ${fmt.size(d.size_bytes)}`)); }
+    const seen = mine && !del && m.kind === 'text' ? mentionSeen(m) : null; if (seen) parts.push(seen);
     parts.push(h('div', { class: 'meta' }, m.pinned_at && !del ? icon('pin', 12) : null, m.edited_at && !del ? h('span', null, 'modifié') : null, h('time', { datetime: m.created_at }, fmt.time(m.created_at)), mine ? statusIcon(m) : null));
-    const bubble = h('div', { class: 'bubble' + (mine ? ' mine' : '') + (first ? ' first' : '') + (last ? ' last' : ''), tabindex: '0', role: 'button', 'aria-haspopup': 'dialog', 'aria-label': 'Actions du message', onclick: () => openActions(m),
-      onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openActions(m); } } }, parts);
+    const bubble = h('div', { class: 'bubble' + (mine ? ' mine' : '') + (first ? ' first' : '') + (last ? ' last' : '') + (mentionedMe ? ' mentioned-me' : '') + (selMode && sel.has(m.id) ? ' selected' : ''), tabindex: '0', role: 'button', 'aria-haspopup': 'dialog', 'aria-label': 'Actions du message', 'aria-pressed': selMode ? String(sel.has(m.id)) : null, onclick: () => tapMsg(m),
+      oncontextmenu: (e) => e.preventDefault(), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tapMsg(m); } } }, parts);
+    pressable(bubble, m);
     const rs = reactions.get(m.id) || [], groups = {}; rs.forEach((r) => { (groups[r.emoji] ||= []).push(r.user_id); });
     const chips = Object.keys(groups).length ? h('div', { class: 'reacts' }, Object.entries(groups).map(([e, u]) => h('button', { type: 'button', class: 'chip' + (u.includes(me()) ? ' mine' : ''), 'aria-label': `Réaction ${e}, ${u.length}`, onclick: () => react(m, e) }, e, u.length > 1 ? ' ' + u.length : ''))) : null;
-    return h('div', { class: 'msg' + (mine ? ' mine' : '') + (first ? ' gap' : ''), role: 'listitem', 'data-id': m.id }, bubble, chips);
+    return h('div', { class: 'msg' + (mine ? ' mine' : '') + (first ? ' gap' : '') + (selMode && sel.has(m.id) ? ' sel' : ''), role: 'listitem', 'data-id': m.id }, bubble, chips);
+  }
+  // message public de l'assistant (réponse à un @talk2piaf, visible par tous les membres)
+  function buildAssistantMsg(m) {
+    const bubble = h('div', { class: 'bubble first last assistant' + (selMode && sel.has(m.id) ? ' selected' : ''), tabindex: '0', role: 'button', 'aria-label': 'Réponse de Talk2Piaf', onclick: () => tapMsg(m), oncontextmenu: (e) => e.preventDefault(),
+      onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tapMsg(m); } } },
+      h('div', { class: 'sender t2p-name' }, 'Talk2Piaf'), h('div', { class: 'text' }, Piaf.assistantInline ? Piaf.assistantInline(m.body || '') : m.body),
+      h('div', { class: 'meta' }, h('time', { datetime: m.created_at }, fmt.time(m.created_at)), h('span', null, ' · demandé par ' + senderName(m.sender_id))));
+    pressable(bubble, m);
+    return h('div', { class: 'msg gap' + (selMode && sel.has(m.id) ? ' sel' : ''), role: 'listitem', 'data-id': m.id }, bubble);
+  }
+  // mentions : qui a été mentionné dans un message de groupe, et l'a-t-il lu ?
+  function mentionedMembers(m) {
+    if (!isGroup() || !members.size || !m.body) return [];
+    const re = mentionRe(), seen = new Set(), out = []; let x;
+    while ((x = re.exec(m.body))) { const mem = [...members.values()].find((u) => norm(u.display_name) === norm(x[2])); if (mem && !mem.is_me && !seen.has(mem.user_id)) { seen.add(mem.user_id); out.push(mem); } }
+    return out;
+  }
+  const mentionSig = (m) => (m.kind === 'text' && isGroup() && m.sender_id === me() ? mentionedMembers(m).map((u) => [u.user_id, u.last_read_at]) : 0);
+  function mentionSeen(m) {
+    const list_ = mentionedMembers(m); if (!list_.length) return null;
+    return h('div', { class: 'mention-seen' }, icon('at', 12), list_.map((u) => { const ok = u.last_read_at && u.last_read_at >= m.created_at;
+      return h('span', { class: 'ms' + (ok ? ' ok' : '') }, u.display_name, ' : ', ok ? 'lu' : 'pas encore lu'); }));
   }
   function mediaBlock(m) {
     const d = mediaOf.get(m.id); if (!d) return h('div', { class: 'media-box ph' }, 'Chargement du média…');
+    if (d.kind === 'audio') return ext().audioBlock(d);
     const box = h('button', { class: 'media-box', type: 'button', 'aria-label': `Ouvrir ${d.name}`, onclick: (e) => { e.stopPropagation(); openMedia(m.id); } });
     Piaf.signedUrl(d.path).then((url) => {
       box.replaceChildren(d.kind === 'photo' ? h('img', { src: url, alt: d.name, loading: 'lazy' }) : [h('video', { src: url + '#t=0.1', preload: 'metadata', muted: true, playsinline: true }), h('span', { class: 'play' }, icon('play', 26))]);
@@ -270,7 +312,7 @@ Piaf.views.chat = (route) => {
     return box;
   }
   function openMedia(msgId) {
-    const items = [...mediaOf.values()].filter((d) => msgs.get(d.message_id) && !msgs.get(d.message_id).deleted_at).sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
+    const items = [...mediaOf.values()].filter((d) => d.kind !== 'audio' && msgs.get(d.message_id) && !msgs.get(d.message_id).deleted_at).sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
     const idx = items.findIndex((d) => d.message_id === msgId); if (idx < 0) return;
     Piaf.openViewer(items, idx, { onChange: () => { syncLatest(); loadQuota(); } });
   }
@@ -287,12 +329,15 @@ Piaf.views.chat = (route) => {
       ], m._out.err && m._out.status === 'failed' ? h('p', { class: 'form-error small pad' }, errText(m._out.err)) : null);
     }
     if (m.kind === 'system') return;
-    const mine = m.sender_id === me(), del = !!m.deleted_at, text = m.kind === 'text' && !del;
+    const mine = m.sender_id === me(), del = !!m.deleted_at, text = (m.kind === 'text' || m.kind === 'assistant') && !del;
+    const more = del ? [] : m.kind === 'poll' ? ext().pollActions(m, ctx) : m.kind === 'todo' ? ext().todoActions(m, ctx) : [];
     const head = del || conv?.blocked_by_me ? null : h('div', { class: 'react-row' }, EMOJIS.map((e) => h('button', { type: 'button', 'aria-label': 'Réagir ' + e, onclick: () => { layer.close(); react(m, e, true); } }, e)));
     const layer = sheet(null, [
       !del && !conv?.blocked_by_me ? { icon: 'reply', label: 'Répondre', onClick: () => startReply(m) } : null,
-      text ? { icon: 'copy', label: 'Copier', onClick: () => copyText(m.body) } : null,
-      text ? { icon: 'fwd', label: 'Transférer', onClick: () => forward(m) } : null,
+      text ? { icon: 'copy', label: 'Copier', onClick: () => copyText(m.kind === 'assistant' ? m.body.replace(/\*\*(.+?)\*\*/gs, '$1') : m.body) } : null,
+      m.kind === 'text' && !del ? { icon: 'fwd', label: 'Transférer', onClick: () => forward(m) } : null,
+      ...more,
+      !del ? { icon: 'check', label: 'Sélectionner', onClick: () => startSelect(m) } : null,
       m.kind === 'media' && !del ? { icon: 'download', label: 'Télécharger', onClick: () => { const d = mediaOf.get(m.id); if (d) Piaf.signedUrl(d.path, d.name).then((u) => { const a = h('a', { href: u, download: d.name }); document.body.append(a); a.click(); a.remove(); toast('Téléchargement lancé. Cela ne libère pas d’espace sur le serveur.'); }).catch((e) => toast(errText(e), { error: true })); } } : null,
       !del ? { icon: 'pin', label: m.pinned_at ? 'Désépingler' : 'Épingler', onClick: () => pin(m) } : null,
       canEdit(m) ? { icon: 'edit', label: 'Modifier', onClick: () => startEdit(m) } : null,
@@ -334,11 +379,11 @@ Piaf.views.chat = (route) => {
   function startReply(m) { editing = null; replyTo = m; drawReplyBar(); ta.focus(); }
   function startEdit(m) { replyTo = null; editing = m; ta.value = m.body; autosize(); drawReplyBar(); ta.focus(); }
   function drawReplyBar() {
-    const x = editing || replyTo; replyBar.hidden = !x; if (!x) return;
+    syncSend(); const x = editing || replyTo; replyBar.hidden = !x; if (!x) return;
     replyBar.replaceChildren(icon(editing ? 'edit' : 'reply', 18), h('div', { class: 'rb-text' }, h('strong', null, editing ? 'Modification du message' : 'Réponse à ' + (x.sender_id === me() ? 'vous-même' : senderName(x.sender_id))), h('span', null, snippet(x))),
       iconBtn('x', 'Annuler', () => { if (editing) { ta.value = ''; autosize(); } editing = null; replyTo = null; drawReplyBar(); }));
   }
-  function autosize() { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; }
+  function autosize() { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; syncSend(); }
   let draftTimer = null;
   function onInput() { autosize(); updateMentions(); clearTimeout(draftTimer); draftTimer = setTimeout(() => { if (!editing) { if (ta.value) store.set(draftKey, ta.value); else store.del(draftKey); } }, 300); }
   async function sendText() {
@@ -352,8 +397,9 @@ Piaf.views.chat = (route) => {
     ta.value = ''; autosize(); store.del(draftKey); replyTo = null; drawReplyBar();
     const p = Piaf.queueMessage(convId, body, { reply_to: rid }); const cid = outStore.list().slice(-1)[0]?.client_id;
     render(); scrollBottom();
-    if (T2P_RE.test(body)) askAssistant(body.replace(T2P_RE_G, ' ').replace(/\s+/g, ' ').trim() || 'Que peux-tu faire ?', cid);
-    await p; Piaf.refreshConvs();
+    if (T2P_RE.test(body)) { const q = body.replace(T2P_RE_G, ' ').replace(/\s+/g, ' ').trim() || 'Que peux-tu faire ?'; await p; await askAssistantPublic(q, cid); }
+    else await p;
+    Piaf.refreshConvs();
   }
 
   // ------------------------------------------------ mentions (@nom) et appel de l'assistant (@talk2piaf)
@@ -371,7 +417,8 @@ Piaf.views.chat = (route) => {
       const s = m.index + m[1].length, tag = m[2];
       if (s > last) out.push(...linkify(body.slice(last, s)));
       const cls = 'mention' + (norm(tag) === norm(S.me.display_name) ? ' me' : '') + (norm(tag) === 'talk2piaf' ? ' t2p' : '');
-      out.push(h('span', { class: cls }, '@' + tag)); last = s + 1 + tag.length;
+      const mem = isGroup() ? [...members.values()].find((u) => norm(u.display_name) === norm(tag)) : null;
+      out.push(h('span', { class: cls, style: mem && !/ me/.test(cls) ? { color: `hsl(${hueOf(mem.user_id)} 62% 44%)` } : null }, tag)); last = s + 1 + tag.length;
     }
     if (last < body.length) out.push(...linkify(body.slice(last)));
     return out;
@@ -412,6 +459,21 @@ Piaf.views.chat = (route) => {
     if (!Piaf.assistantAsk) return;
     setTimeout(() => { if (!destroyed) addWhisper(Piaf.assistantAsk(q), after); }, 450);
   }
+  // réponse publique : publiée dans la discussion, visible de tous ; le texte est composé sur l'appareil de la personne qui appelle l'assistant
+  async function askAssistantPublic(q, after) {
+    if (!Piaf.assistantAsk || destroyed) return;
+    const r = Piaf.assistantAsk(q);
+    const pending = outStore.list().some((i) => i.client_id === after);
+    const body = (r.text + (r.links.length ? '\n' + r.links.map((l) => l.l + ' : ' + l.u).join('\n') : '')).slice(0, 1500);
+    if (!pending && S.online) {
+      try {
+        const row = await api.rpc('post_assistant_reply', { p_conv: convId, p_client_id: uuid(), p_body: body }); bus.emit('sent', row);
+        if (r.acts.length && !destroyed) addWhisper({ text: 'Actions possibles (visibles par vous seul) :', links: [], chips: [], acts: r.acts }, row.id);
+        return;
+      } catch (e) { /* repli : réponse locale ci-dessous */ }
+    }
+    if (!destroyed) addWhisper(r, after);
+  }
   async function runWhisperAct(w, j, btn) {
     const act = w.r.acts[j]; if (!act || act.done) return; btn.disabled = true;
     try {
@@ -433,7 +495,7 @@ Piaf.views.chat = (route) => {
     for (const f of files) {
       const mime = mimeOf(f), kind = OK_MIME.has(mime) ? kindOf(mime) : null;
       if (!kind) { errs.push(`${f.name} : format non accepté`); continue; }
-      const lim = kind === 'photo' ? cfg().photo_max_bytes : cfg().video_max_bytes;
+      const lim = kind === 'photo' ? cfg().photo_max_bytes : kind === 'video' ? cfg().video_max_bytes : (cfg().audio_max_bytes || 10485760);
       if (f.size > lim) { errs.push(`${f.name} : trop volumineux (${fmt.size(f.size)}, limite ${fmt.size(lim)})`); continue; }
       if (f.size === 0) { errs.push(`${f.name} : fichier vide`); continue; }
       if (tray.length >= max) { errs.push(`Maximum ${max} fichiers par envoi`); break; }
@@ -446,7 +508,7 @@ Piaf.views.chat = (route) => {
   function drawTray() {
     trayEl.hidden = !tray.length; if (!tray.length) return;
     const total = tray.reduce((n, t) => n + t.file.size, 0);
-    trayEl.replaceChildren(h('div', { class: 'tray-items' }, tray.map((t, i) => h('div', { class: 'tray-item' }, t.url ? h('img', { src: t.url, alt: t.file.name }) : h('span', { class: 'vid' }, icon('film', 24)),
+    trayEl.replaceChildren(h('div', { class: 'tray-items' }, tray.map((t, i) => h('div', { class: 'tray-item' }, t.url ? h('img', { src: t.url, alt: t.file.name }) : h('span', { class: 'vid' }, icon(t.kind === 'audio' ? 'music' : 'film', 24)),
       h('span', { class: 'tray-sz' }, fmt.size(t.file.size)), h('button', { type: 'button', class: 'tray-x', 'aria-label': 'Retirer ' + t.file.name, onclick: () => { if (t.url) URL.revokeObjectURL(t.url); tray.splice(i, 1); drawTray(); } }, icon('x', 14))))),
       h('div', { class: 'tray-foot' }, h('span', { class: 'muted small' }, `${tray.length} fichier${tray.length > 1 ? 's' : ''} · ${fmt.size(total)} · espace restant ${fmt.size(remaining())}`),
         h('button', { class: 'btn primary', type: 'button', onclick: () => { const f = tray.map((t) => ({ file: t.file, mime: t.mime })); tray.forEach((t) => t.url && URL.revokeObjectURL(t.url)); tray = []; drawTray(); startUpload(f); } }, 'Envoyer')));
@@ -458,13 +520,13 @@ Piaf.views.chat = (route) => {
   }
   async function startUpload(files) {
     let res;
-    try { res = await api.rpc('reserve_media', { p_conv: convId, p_files: files.map((f) => ({ name: f.file.name, mime: f.mime, size: f.file.size })) }); }
+    try { res = await api.rpc('reserve_media', { p_conv: convId, p_files: files.map((f) => ({ name: f.file.name, mime: f.mime, size: f.file.size, duration: f.duration })) }); }
     catch (e) {
       if (toCode(e) === 'quota_exceeded') { await loadQuota(); return quotaModal(Number(e.detail) || undefined); }
       return toast(errText(e), { error: true });
     }
     await loadQuota();
-    const jobs = res.map((r, i) => ({ id: r.o_id, path: r.o_path, file: files[i].file, mime: files[i].mime, progress: 0, status: 'uploading', xhr: null }));
+    const jobs = res.map((r, i) => ({ id: r.o_id, path: r.o_path, file: files[i].file, mime: files[i].mime, duration: files[i].duration, progress: 0, status: 'uploading', xhr: null }));
     uploads.push(...jobs); drawUploads();
     const token = await api.accessToken(); const queue = [...jobs];
     const worker = async () => { for (let j = queue.shift(); j; j = queue.shift()) await uploadOne(j, token); };
@@ -497,11 +559,78 @@ Piaf.views.chat = (route) => {
   function drawUploads() {
     uploads = uploads.filter((j) => j.status !== 'canceled'); uploadsEl.hidden = !uploads.length;
     uploadsEl.replaceChildren(...uploads.map((j) => h('div', { class: 'upload' + (j.status === 'failed' ? ' failed' : ''), 'data-job': j.id },
-      icon(j.mime.startsWith('image/') ? 'image' : 'film', 20),
+      icon(j.mime.startsWith('image/') ? 'image' : j.mime.startsWith('audio/') ? 'music' : 'film', 20),
       h('div', { class: 'up-main' }, h('span', { class: 'up-name' }, j.file.name), j.status === 'failed' ? h('span', { class: 'form-error small' }, errText(j.err)) :
         h('span', { class: 'bar', role: 'progressbar', 'aria-valuenow': String(Math.round(j.progress * 100)), 'aria-valuemin': '0', 'aria-valuemax': '100' }, h('i', { style: { width: Math.round(j.progress * 100) + '%' } }))),
-      j.status === 'failed' ? h('button', { class: 'btn small', type: 'button', onclick: () => { uploads = uploads.filter((x) => x !== j); drawUploads(); startUpload([{ file: j.file, mime: j.mime }]); } }, 'Réessayer') : null,
+      j.status === 'failed' ? h('button', { class: 'btn small', type: 'button', onclick: () => { uploads = uploads.filter((x) => x !== j); drawUploads(); startUpload([{ file: j.file, mime: j.mime, duration: j.duration }]); } }, 'Réessayer') : null,
       iconBtn('x', j.status === 'failed' ? 'Retirer' : 'Annuler l’envoi', () => { if (j.xhr && j.status === 'uploading') j.xhr.abort(); api.media({ action: 'abort', ids: [j.id] }).then(loadQuota).catch(() => {}); j.status = 'canceled'; drawUploads(); }))));
+  }
+
+  // ------------------------------------------------ pièces jointes, sondages, listes, messages vocaux
+  function attachMenu() {
+    if (conv?.blocked_by_me) return;
+    sheet('Ajouter', [
+      { icon: 'image', label: 'Photos et vidéos', onClick: () => fileInput.click() },
+      { icon: 'music', label: 'Fichier audio', onClick: () => audioInput.click() },
+      { icon: 'poll', label: 'Sondage', onClick: () => ext().openPollDialog(ctx) },
+      { icon: 'list', label: 'Liste de tâches', onClick: () => ext().openTodoDialog(ctx) },
+    ]);
+  }
+  async function startRecord() {
+    if (recorder || conv?.blocked_by_me) return;
+    const rec = ext().recorderBar({ maxMs: 600000, onDone: (r) => { recorder = null; rec.el.remove(); composerRow.hidden = false; if (r) sendVoice(r); } });
+    recorder = rec; composerRow.hidden = true; composer.append(rec.el);
+    try { await rec.start(); } catch (e) { recorder = null; rec.el.remove(); composerRow.hidden = false; toast(e && e.name === 'NotAllowedError' ? 'Accès au micro refusé. Autorisez-le dans les réglages du navigateur.' : 'Enregistrement impossible sur cet appareil.', { error: true }); }
+  }
+  function sendVoice(r) {
+    const lim = cfg().audio_max_bytes || 10485760;
+    if (r.file.size > lim) return toast(`Message vocal trop volumineux (limite ${fmt.size(lim)})`, { error: true });
+    if (r.file.size > remaining()) return quotaModal();
+    startUpload([{ file: r.file, mime: r.mime, duration: r.duration }]);
+  }
+
+  // ------------------------------------------------ sélection multiple (appui long)
+  function pressable(node, m) {
+    if (m._out || m.kind === 'system' || m.deleted_at) return;
+    let t = null, x0 = 0, y0 = 0, fired = false; const clear = () => { clearTimeout(t); t = null; };
+    node.addEventListener('pointerdown', (e) => { if (e.button > 0) return; fired = false; x0 = e.clientX; y0 = e.clientY; clear();
+      t = setTimeout(() => { t = null; fired = true; if (navigator.vibrate) { try { navigator.vibrate(15); } catch { /* */ } } if (selMode) toggleSel(m); else startSelect(m); }, 480); });
+    node.addEventListener('pointermove', (e) => { if (t && Math.hypot(e.clientX - x0, e.clientY - y0) > 10) clear(); });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => node.addEventListener(ev, clear));
+    node.addEventListener('click', (e) => { if (fired) { e.stopImmediatePropagation(); e.preventDefault(); fired = false; } }, true);
+  }
+  function tapMsg(m) { if (selMode) { if (!m._out && m.kind !== 'system') toggleSel(m); } else openActions(m); }
+  function startSelect(m) { selMode = true; sel = new Set([m.id]); drawSelBar(); render(); }
+  function toggleSel(m) { if (sel.has(m.id)) sel.delete(m.id); else sel.add(m.id); if (!sel.size) return endSelect(); drawSelBar(); render(); }
+  function endSelect() { selMode = false; sel = new Set(); drawSelBar(); render(); }
+  const selected = () => [...sel].map((id) => msgs.get(id)).filter(Boolean).sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
+  function drawSelBar() {
+    header.hidden = selMode; selBar.hidden = !selMode; composer.hidden = selMode || composer.classList.contains('gone'); if (!selMode) return;
+    const ms = selected(), texts = ms.filter((m) => m.kind === 'text' || m.kind === 'assistant'), canAll = ms.length > 0 && ms.every(canDelAll);
+    selBar.replaceChildren(iconBtn('x', 'Annuler la sélection', endSelect), h('strong', { class: 'sel-count' }, `${ms.length} sélectionné${ms.length > 1 ? 's' : ''}`),
+      iconBtn('copy', 'Copier', () => { const t = ms.filter((m) => m.kind === 'text' || m.kind === 'assistant'); copyText(t.length === 1 ? t[0].body.replace(/\*\*(.+?)\*\*/gs, '$1') : t.map((m) => `${senderName(m.sender_id)} : ${m.body}`).join('\n')); endSelect(); }, texts.length ? '' : 'disabled'),
+      iconBtn('fwd', 'Transférer', () => bulkForward(ms.filter((m) => m.kind === 'text')), ms.some((m) => m.kind === 'text') ? '' : 'disabled'),
+      iconBtn('eye', 'Supprimer pour moi', () => bulkDelMe(ms)), iconBtn('trash', 'Supprimer pour tout le monde', () => bulkDelAll(ms), canAll ? '' : 'disabled'));
+    selBar.querySelectorAll('.disabled').forEach((b) => { b.disabled = true; });
+  }
+  async function bulkDelMe(ms) {
+    if (!(await confirmDialog(`Supprimer ${ms.length} message${ms.length > 1 ? 's' : ''} pour vous ?`, 'Ils disparaissent de votre côté seulement. Les autres participants les gardent. Cette action est définitive pour vous.', 'Supprimer pour moi', true))) return;
+    let fails = 0; for (const m of ms) { try { await api.rpc('delete_message_for_me', { p_id: m.id }); msgs.delete(m.id); nodes.delete(m.id); pins.delete(m.id); } catch { fails++; } }
+    endSelect(); Piaf.refreshConvs(); if (fails) toast(`${fails} message${fails > 1 ? 's n’ont' : ' n’a'} pas pu être supprimé${fails > 1 ? 's' : ''}.`, { error: true });
+  }
+  async function bulkDelAll(ms) {
+    if (!(await confirmDialog(`Supprimer ${ms.length} message${ms.length > 1 ? 's' : ''} pour tout le monde ?`, 'Les messages seront remplacés par « Ce message a été supprimé » chez tous les participants ; les médias sont effacés du serveur.', 'Supprimer pour tous', true))) return;
+    let fails = 0;
+    for (const m of ms) {
+      try { if (m.kind === 'media') await api.media({ action: 'delete', id: mediaOf.get(m.id)?.id }); else await api.rpc('delete_message_for_all', { p_id: m.id }); upsert({ ...m, body: null, deleted_at: new Date().toISOString(), pinned_at: null }); } catch { fails++; }
+    }
+    endSelect(); Piaf.refreshConvs(); loadQuota(); if (fails) { toast(`${fails} suppression${fails > 1 ? 's ont' : ' a'} échoué.`, { error: true }); syncLatest(); }
+  }
+  function bulkForward(ms) {
+    if (!ms.length) return;
+    sheet(`Transférer ${ms.length} message${ms.length > 1 ? 's' : ''} à…`, S.convs.filter((c) => !c.blocked_by_me).map((c) => ({ icon: 'fwd', label: Piaf.convName(c), onClick: async () => {
+      for (const m of ms) await Piaf.queueMessage(c.conversation_id, m.body, { forwarded: true });
+      endSelect(); toast('Messages transférés à ' + Piaf.convName(c)); } })));
   }
 
   // ------------------------------------------------ menus : profil, options, recherche
@@ -549,6 +678,10 @@ Piaf.views.chat = (route) => {
   }
 
   // ------------------------------------------------ temps réel
+  function extChanged(p) {
+    const c = (p.new && p.new.conversation_id) || (p.old && p.old.conversation_id); if (c && c !== convId) return;
+    clearTimeout(extTimer); extTimer = setTimeout(() => { if (!destroyed) ext().load(convId).then(() => { if (!destroyed) render(); }); }, 250);
+  }
   const unsubs = [
     bus.on('msg', async (p) => {
       const row = p.new; if (!row || row.conversation_id !== convId) return;
@@ -561,6 +694,7 @@ Piaf.views.chat = (route) => {
         if (row.kind === 'media') setTimeout(() => hydrate([row]).then(render).catch(() => {}), 600);
       }
     }),
+    bus.on('poll', (p) => extChanged(p)), bus.on('todo', (p) => extChanged(p)),
     bus.on('member', (p) => { if (p.eventType === 'DELETE' && p.old?.conversation_id === convId && p.old?.user_id === me()) { toast('Vous ne faites plus partie de ce groupe.', { error: true }); Piaf.go('#/'); } else loadMembers(true); }),
     bus.on('react', (p) => { const id = p.new?.message_id || p.old?.message_id; if (id && msgs.has(id)) refreshReacts(id); }),
     bus.on('media', (p) => { const r = p.new; if (r && r.conversation_id === convId && r.message_id && msgs.has(r.message_id)) hydrate([msgs.get(r.message_id)]).then(render).catch(() => {}); }),
@@ -587,7 +721,8 @@ Piaf.views.chat = (route) => {
     render(); scrollBottom(); loadQuota(); scheduleRead(); Piaf.flushOutbox();
     if (isGroup()) { loadMembers(true); membersTimer = setInterval(() => { if (!document.hidden) loadMembers(true); }, 20000); }
   }
-  return { el, mounted() { init(); }, destroy() { destroyed = true; clearInterval(membersTimer); unsubs.forEach((u) => u()); clearTimeout(markTimer); uploads.forEach((j) => { if (j.xhr && j.status === 'uploading') { j.xhr.abort(); api.media({ action: 'abort', ids: [j.id] }).catch(() => {}); } }); tray.forEach((t) => t.url && URL.revokeObjectURL(t.url)); } };
+  syncSend();
+  return { el, mounted() { init(); }, destroy() { destroyed = true; clearInterval(membersTimer); clearTimeout(extTimer); if (recorder) recorder.cancel(); unsubs.forEach((u) => u()); clearTimeout(markTimer); uploads.forEach((j) => { if (j.xhr && j.status === 'uploading') { j.xhr.abort(); api.media({ action: 'abort', ids: [j.id] }).catch(() => {}); } }); tray.forEach((t) => t.url && URL.revokeObjectURL(t.url)); } };
 };
 
 // ================================================================== galerie des médias partagés
@@ -598,7 +733,7 @@ Piaf.views.gallery = (route) => {
   const usage = h('div', { class: 'card usage' }), grid = h('div', { class: 'grid' }), moreBtn = h('button', { class: 'btn', type: 'button', hidden: true, onclick: () => load(true) }, 'Charger plus');
   const search = h('input', { type: 'search', placeholder: 'Rechercher par nom de fichier', 'aria-label': 'Rechercher par nom de fichier', oninput: () => { clearTimeout(search._t); search._t = setTimeout(() => { query = search.value.trim(); load(); }, 300); } });
   const seg = h('div', { class: 'segmented', role: 'radiogroup', 'aria-label': 'Type de média' });
-  function drawSeg() { seg.replaceChildren(...[['', 'Tout'], ['photo', 'Photos'], ['video', 'Vidéos']].map(([k, l]) => h('button', { type: 'button', role: 'radio', 'aria-checked': String(kind === k), class: kind === k ? 'on' : '', onclick: () => { kind = k; drawSeg(); load(); } }, l))); }
+  function drawSeg() { seg.replaceChildren(...[['', 'Tout'], ['photo', 'Photos'], ['video', 'Vidéos'], ['audio', 'Audio']].map(([k, l]) => h('button', { type: 'button', role: 'radio', 'aria-checked': String(kind === k), class: kind === k ? 'on' : '', onclick: () => { kind = k; drawSeg(); load(); } }, l))); }
   function drawUsage() {
     const quota = S.cfg.conversation_quota_bytes, pct = Math.min(100, Math.round((used / quota) * 100)), left = Math.max(0, quota - used);
     usage.replaceChildren(h('div', { class: 'usage-top' }, h('strong', null, `${fmt.size(used)} utilisés sur ${fmt.size(quota)}`), h('span', { class: 'muted' }, `${fmt.size(left)} restants`)),
@@ -609,7 +744,7 @@ Piaf.views.gallery = (route) => {
   async function load(append) {
     try {
       const from = append ? items.length : 0;
-      let qy = sb.from('my_media').select('id,message_id,name,mime,kind,size_bytes,path,created_at,uploader_id').eq('conversation_id', convId).order('created_at', { ascending: false }).range(from, from + PAGE_G - 1);
+      let qy = sb.from('my_media').select(MEDIA_COLS).eq('conversation_id', convId).order('created_at', { ascending: false }).range(from, from + PAGE_G - 1);
       if (kind) qy = qy.eq('kind', kind); if (query) qy = qy.ilike('name', `%${esc(query)}%`);
       const rows = await api.q(qy); if (destroyed) return;
       items = append ? items.concat(rows) : rows; more = rows.length === PAGE_G;
@@ -622,7 +757,8 @@ Piaf.views.gallery = (route) => {
     moreBtn.hidden = !more;
     if (!items.length) { grid.replaceChildren(h('div', { class: 'empty' }, icon('image', 40), h('h2', null, query || kind ? 'Aucun résultat' : 'Aucun média partagé'), h('p', { class: 'muted' }, query || kind ? 'Essayez un autre filtre.' : 'Les photos et vidéos envoyées dans cette discussion apparaissent ici.'))); return; }
     grid.replaceChildren(...items.map((m, i) => {
-      const t = h('button', { class: 'tile', type: 'button', 'aria-label': `${m.name}, ${fmt.size(m.size_bytes)}`, onclick: () => Piaf.openViewer(items.slice(), i, { onChange: () => load() }) });
+      if (m.kind === 'audio') return h('button', { class: 'tile audio-tile', type: 'button', 'aria-label': `Audio ${m.name}, ${fmt.size(m.size_bytes)}`, onclick: () => modal({ title: 'Audio', body: [Piaf.ext.audioBlock(m), h('p', { class: 'muted small' }, `${m.name} · ${fmt.size(m.size_bytes)} · ${fmt.dateTime(m.created_at)}`)], actions: [{ label: 'Fermer', primary: true }] }) }, icon('music', 28), h('span', { class: 'tile-name' }, m.name), h('span', { class: 'tile-sz' }, fmt.size(m.size_bytes)));
+      const t = h('button', { class: 'tile', type: 'button', 'aria-label': `${m.name}, ${fmt.size(m.size_bytes)}`, onclick: () => Piaf.openViewer(items.filter((x) => x.kind !== 'audio'), items.filter((x) => x.kind !== 'audio').indexOf(m), { onChange: () => load() }) });
       Piaf.signedUrl(m.path).then((u) => t.prepend(m.kind === 'photo' ? h('img', { src: u, alt: '', loading: 'lazy' }) : h('video', { src: u + '#t=0.1', preload: 'metadata', muted: true, playsinline: true }))).catch(() => {});
       t.append(h('span', { class: 'tile-sz' }, m.kind === 'video' ? icon('play', 12) : null, fmt.size(m.size_bytes))); return t;
     }));

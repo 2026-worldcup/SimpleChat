@@ -101,7 +101,9 @@ Piaf.views.home = () => {
     if (!c.last_message_id) return 'Nouvelle discussion';
     if (c.last_deleted) return 'Message supprimé';
     if (c.last_kind === 'system') return c.last_body;
-    return (c.last_sender === myId() ? 'Vous : ' : c.kind === 'group' && c.last_sender_name ? c.last_sender_name + ' : ' : '') + (c.last_kind === 'media' ? '📎 Média' : c.last_body);
+    const who = c.last_kind === 'assistant' ? 'Talk2Piaf : ' : c.last_sender === myId() ? 'Vous : ' : c.kind === 'group' && c.last_sender_name ? c.last_sender_name + ' : ' : '';
+    const what = c.last_kind === 'media' ? '📎 Média' : c.last_kind === 'poll' ? '📊 Sondage : ' + c.last_body : c.last_kind === 'todo' ? '✅ Liste : ' + c.last_body : c.last_body;
+    return who + what;
   }
   function drawList() {
     const all = Piaf.withAssistant ? Piaf.withAssistant(S.convs) : S.convs;   // Talk2Piaf figure dans la liste comme une discussion
@@ -127,6 +129,7 @@ Piaf.views.home = () => {
           h('span', { class: 'conv-top' }, h('span', { class: 'conv-name' }, Piaf.convName(c), c.assistant ? h('span', { class: 'tag' }, 'Assistant') : null), h('span', { class: 'conv-time' }, fmt.listTime(c.last_at))),
           h('span', { class: 'conv-bot' }, h('span', { class: 'conv-prev' }, preview(c)),
             c.muted ? icon('mute', 16) : null, c.favorite ? icon('star', 16) : null,
+            c.unread && S.mentions && S.mentions[c.conversation_id] ? h('span', { class: 'badge at', title: 'Vous avez été mentionné(e)', 'aria-label': 'Mention non lue' }, '@') : null,
             c.unread ? h('span', { class: 'badge' }, c.unread > 99 ? '99+' : c.unread) : null))),
       iconBtn('dots', 'Options de la discussion', () => Piaf.convMenu(c)))));
   }
