@@ -176,7 +176,7 @@
   P.assistantInline = inline;
   const sameGroup = (a, b) => a && b && a.role === b.role && fmt.dayKey(a.at) === fmt.dayKey(b.at) && Math.abs(new Date(b.at) - new Date(a.at)) < 300000;
 
-  // ---------------------------------------------------------------- @talk2piaf dans les autres discussions (réponse locale, visible par la personne qui l'appelle)
+  // ---------------------------------------------------------------- relais depuis Talk2Piaf Cowork : réponse locale de Talk2Piaf, visible par la seule personne qui la demande
   P.assistantAsk = (q) => {
     let r; try { r = KB.reply(q, context(), mem); } catch (e) { console.error(e); r = null; }
     if (!r) r = { text: 'Je n’ai pas réussi à traiter ce message. Pouvez-vous le reformuler ?', chips: KB.starters().slice(0, 4), links: [], acts: [] };
@@ -191,10 +191,10 @@
     if (links.length) extras.push(h('div', { class: 't2p-links' }, links));
     if (r.acts && r.acts.length) extras.push(h('div', { class: 't2p-acts' }, r.acts.map((a, j) => h('button', { type: 'button', class: 't2p-act' + (a.done ? ' done' : ''), disabled: !!a.done, onclick: (e) => o.onAct(j, e.currentTarget) }, a.l))));
     if (o.showChips && r.chips && r.chips.length) extras.push(h('div', { class: 't2p-chips' }, r.chips.map((c) => h('button', { type: 'button', class: 't2p-chip', onclick: () => o.onChip(c.t) }, c.l))));
-    const bubble = h('div', { class: 'bubble first last whisper', tabindex: '0', role: 'button', 'aria-haspopup': 'dialog', 'aria-label': 'Réponse de Talk2Piaf',
+    const bubble = h('div', { class: 'bubble first last whisper', tabindex: '0', role: 'button', 'aria-haspopup': 'dialog', 'aria-label': 'Réponse de ' + (o.name || NAME),
       onclick: () => o.onMenu(), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); o.onMenu(); } } },
-      h('div', { class: 'sender t2p-name' }, NAME), h('div', { class: 'text' }, inline(r.text)),
-      h('div', { class: 'meta' }, h('time', { datetime: o.time }, fmt.time(o.time)), h('span', null, ' · visible par vous seul')));
+      h('div', { class: 'sender t2p-name' }, o.name || NAME), h('div', { class: 'text' }, inline(r.text)),
+      h('div', { class: 'meta' }, h('time', { datetime: o.time }, fmt.time(o.time)), h('span', null, o.note || ' · visible par vous seul')));
     return h('div', { class: 'msg gap', role: 'listitem' }, bubble, extras.length ? h('div', { class: 't2p-extras' }, extras) : null);
   };
 

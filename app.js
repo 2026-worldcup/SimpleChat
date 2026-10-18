@@ -141,6 +141,8 @@ const ERR = {
   invalid_name: 'Choisissez un nom d’affichage (1 à 40 caractères).', invalid_password: 'Le code secret doit faire entre 8 et 64 caractères.',
   signup_rate_limited: 'Trop de créations de comptes pour le moment. Réessayez plus tard.', signup_failed: 'Création du compte impossible. Réessayez.',
   server_misconfigured: 'Le service n’est pas encore configuré (voir README).', network: 'Pas de connexion. Réessayez quand le réseau revient.',
+  poll_closed: 'Ce sondage est clos.', poll_has_votes: 'Impossible : des votes existent déjà sur ce sondage.', too_many_options: 'Un sondage accepte 12 options au maximum.', too_many_items: 'Une liste accepte 100 éléments au maximum (50 à sa création).',
+  quota_exceeded: 'Le quota de médias de cette discussion est atteint.',
   storage_cleanup_failed: 'Suppression des fichiers impossible pour l’instant ; le compte n’a pas été supprimé. Réessayez.',
 };
 class PiafError extends Error { constructor(code, extra) { super(code); this.code = code; Object.assign(this, extra); } }

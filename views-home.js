@@ -101,7 +101,7 @@ Piaf.views.home = () => {
     if (!c.last_message_id) return 'Nouvelle discussion';
     if (c.last_deleted) return 'Message supprimé';
     if (c.last_kind === 'system') return c.last_body;
-    const who = c.last_kind === 'assistant' ? 'Talk2Piaf : ' : c.last_sender === myId() ? 'Vous : ' : c.kind === 'group' && c.last_sender_name ? c.last_sender_name + ' : ' : '';
+    const who = c.last_kind === 'assistant' ? 'Talk2Piaf Cowork : ' : c.last_sender === myId() ? 'Vous : ' : c.kind === 'group' && c.last_sender_name ? c.last_sender_name + ' : ' : '';
     const what = c.last_kind === 'media' ? '📎 Média' : c.last_kind === 'poll' ? '📊 Sondage : ' + c.last_body : c.last_kind === 'todo' ? '✅ Liste : ' + c.last_body : c.last_body;
     return who + what;
   }

@@ -37,6 +37,26 @@ const rerender = (ctx) => ctx.rerender();
 const ownerOf = (x, ctx) => x.creator_id === S.me.id || ctx.isAdmin();
 const fail = (e) => toast(errText(e), { error: true });
 
+// État des sondages et des listes d'une discussion, au format attendu par Talk2Piaf Cowork (assistant-cowork-kb.js) : lecture seule.
+// o = { isAdmin: bool, nameOf(id), dead(messageId) } ; les sondages et listes dont le message est supprimé sont ignorés.
+ext.snapshot = (cid, o = {}) => {
+  const s = stores.get(cid), out = { polls: [], lists: [] }; if (!s) return out;
+  const dead = o.dead || (() => false), admin = !!o.isAdmin, nm = o.nameOf || (() => '');
+  for (const p of s.polls.values()) {
+    if (dead(p.message_id)) continue;
+    const closed = !!p.closed_at || (p.closes_at && new Date(p.closes_at) <= Date.now());
+    out.polls.push({ id: p.id, mid: p.message_id, question: p.question, open: !closed, mine: p.creator_id === S.me.id, total: s.pv.get(p.id) || 0,
+      votes: (s.opts.get(p.id) || []).map((x) => ({ t: x.label, n: (s.res.get(x.id) || {}).votes || 0 })) });
+  }
+  for (const l of s.lists.values()) {
+    if (dead(l.message_id)) continue;
+    const owner = l.creator_id === S.me.id || admin;
+    out.lists.push({ id: l.id, mid: l.message_id, title: l.title, open: true, mine: l.creator_id === S.me.id, canAdd: owner || !!l.members_can_add, canCheck: owner || !!l.members_can_check,
+      items: (s.items.get(l.id) || []).map((i) => ({ id: i.id, t: i.text, done: !!i.done, who: i.assigned_to ? nm(i.assigned_to) : undefined, whoId: i.assigned_to || undefined })) });
+  }
+  return out;
+};
+
 // ------------------------------------------------------------------ petits composants de formulaire
 const chk = (label, checked, disabled, hint) => {
   const input = h('input', { type: 'checkbox', checked: !!checked, disabled: !!disabled });
