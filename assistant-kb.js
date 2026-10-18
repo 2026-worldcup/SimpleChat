@@ -22,6 +22,23 @@ const A = (l, a, p) => ({ l, a, p: p || {} });   // bouton d'action
 const LK = (l, u) => ({ l, u });                  // lien externe
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
+// Moteurs de recherche proposés dans Paramètres (%s = requête encodée). « custom » : adresse https saisie par la personne.
+const ENGINES = [
+  { id: 'ddg', name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=%s' },
+  { id: 'google', name: 'Google', url: 'https://www.google.com/search?q=%s' },
+  { id: 'bing', name: 'Bing', url: 'https://www.bing.com/search?q=%s' },
+  { id: 'qwant', name: 'Qwant', url: 'https://www.qwant.com/?q=%s' },
+  { id: 'ecosia', name: 'Ecosia', url: 'https://www.ecosia.org/search?q=%s' },
+  { id: 'brave', name: 'Brave Search', url: 'https://search.brave.com/search?q=%s' },
+  { id: 'startpage', name: 'Startpage', url: 'https://www.startpage.com/do/search?q=%s' },
+];
+const validEngineUrl = (u) => { try { const x = new URL(String(u).replace('%s', 'x')); return x.protocol === 'https:' && String(u).includes('%s') && String(u).length <= 300; } catch { return false; } };
+// pref = { id, url? } (réglage de la personne) → { name, url } toujours utilisable ; repli sur DuckDuckGo
+function engineOf(pref) {
+  if (pref && pref.id === 'custom' && validEngineUrl(pref.url)) { let host = 'moteur personnalisé'; try { host = new URL(pref.url.replace('%s', 'x')).hostname.replace(/^www\./, ''); } catch { /* */ } return { id: 'custom', name: host, url: pref.url }; }
+  return ENGINES.find((e) => pref && e.id === pref.id) || ENGINES[0];
+}
+
 // ------------------------------------------------------------------ sujets
 const TOPICS = [];
 const BY_ID = {};
@@ -36,8 +53,8 @@ T('about', 'Qu’est-ce que Piaf ?', ['=piaf', 'qu est ce que piaf', 'c est quoi
   'Piaf est une **messagerie privée** en français, pensée pour le smartphone : discussions à deux, groupes, photos et vidéos, réactions, réponses… Son principe central : **on l’utilise sans adresse e-mail et sans numéro de téléphone**. Vous avez un identifiant à 8 chiffres et un code secret, c’est tout.',
   { next: ['features', 'no_email', 'create_account', 'install'] });
 T('features', 'Quelles sont les fonctionnalités de Piaf ?', ['fonctionnalite', 'que peut faire piaf', 'que propose piaf', 'possibilites', 'liste des fonctions', 'qu est ce qu on peut faire'],
-  'Voici ce que Piaf sait faire :\n• discussions à deux et **groupes** (2 à 32 personnes)\n• messages en temps réel : réponse, modification, réaction, transfert, épinglage, recherche\n• **photos et vidéos** avec galerie\n• statuts d’envoi : envoyé, distribué, lu\n• favoris, archives, silence par discussion\n• blocage et signalement\n• thème clair ou sombre, notifications, installation sur l’écran d’accueil\n• envoi de messages hors connexion (ils partent au retour du réseau)',
-  { next: ['groups_intro', 'send_photo', 'msg_status', 'limits'] });
+  'Voici ce que Piaf sait faire :\n• discussions à deux et **groupes** (2 à 32 personnes)\n• messages en temps réel : réponse, modification, réaction, transfert, épinglage, recherche\n• **photos, vidéos et audio** (messages vocaux compris) avec galerie\n• **sondages** et **listes de tâches** collaboratives\n• **mentions** avec @\n• statuts d’envoi : envoyé, distribué, lu\n• favoris, archives, silence par discussion\n• blocage et signalement\n• thème clair ou sombre, notifications, installation sur l’écran d’accueil\n• envoi de messages hors connexion (ils partent au retour du réseau)',
+  { next: ['groups_intro', 'poll_create', 'todo_create', 'voice_send'] });
 T('why_piaf', 'Pourquoi cette application s’appelle Piaf ?', ['pourquoi piaf', 'nom piaf', 'origine nom', 'signification piaf', 'logo', 'oiseau logo', 'pourquoi un oiseau', 'nom de l application'],
   '« Piaf » est un mot familier français pour désigner un moineau, et plus largement un petit oiseau — d’où le logo. Un nom léger pour une messagerie légère : des messages qui s’envolent d’un téléphone à l’autre.',
   { next: ['about', 'fun_fact'] });
@@ -50,8 +67,8 @@ T('price', 'Piaf est-il gratuit ?', ['gratuit', 'prix', 'payant', 'abonnement', 
 T('language', 'Piaf existe-t-il dans d’autres langues ?', ['langue', 'anglais', 'espagnol', 'traduction application', 'autre langue', 'english'],
   'Pour l’instant, Piaf est uniquement en français. Pour traduire un texte, je peux vous donner un lien vers un service de traduction : écrivez par exemple « traduis bonjour en anglais ».',
   { next: ['about'] });
-T('missing', 'Quelles fonctions n’existent pas encore ?', ['appel', 'appel video', 'message vocal', 'vocal', 'sticker', 'story', 'pdf', 'document joint', 'fichier joint', 'partage de position', 'localisation', 'fonction manquante', 'pas encore disponible', 'push'],
-  'Ce qui n’est pas disponible pour l’instant :\n• appels audio ou vidéo, messages vocaux\n• envoi de documents (PDF…) : seuls les photos et les vidéos sont acceptés\n• transfert de photos et de vidéos (seuls les textes se transfèrent)\n• alertes quand l’application est totalement fermée\n• changement du code secret depuis l’application\n• export de vos données\n• chiffrement de bout en bout',
+T('missing', 'Quelles fonctions n’existent pas encore ?', ['appel', 'appel video', 'sticker', 'story', 'pdf', 'document joint', 'fichier joint', 'partage de position', 'localisation', 'fonction manquante', 'pas encore disponible', 'push'],
+  'Ce qui n’est pas disponible pour l’instant :\n• appels audio ou vidéo\n• envoi de documents (PDF…) : seuls les photos, les vidéos et l’audio sont acceptés\n• transfert de photos et de vidéos (seuls les textes se transfèrent)\n• alertes quand l’application est totalement fermée\n• changement du code secret depuis l’application\n• export de vos données\n• chiffrement de bout en bout',
   { next: ['notif_problem', 'encryption', 'change_code'] });
 
 // ---- Compte, identifiant, code secret
@@ -187,15 +204,53 @@ T('send_photo', 'Comment envoyer une photo ou une vidéo ?', ['envoyer photo', '
 T('media_limits', 'Quelle est la taille maximale des fichiers ?', ['taille maximale', 'taille max', 'poids maximum', 'trop volumineux', 'fichier trop gros', 'fichier trop lourd', 'limite photo', 'limite video', 'taille photo', 'taille video', 'poids photo', 'poids video', 'formats acceptes', 'format photo', 'format video', 'heic', 'mov', 'compresser'],
   'Limites par défaut : **photo 10 Mo**, **vidéo 25 Mo**, **10 fichiers par envoi**. Formats acceptés : JPEG, PNG, WebP, GIF, HEIC (photos) ; MP4, WebM, MOV (vidéos). Les PDF et autres documents ne sont pas acceptés. Si une vidéo est trop lourde, raccourcissez-la ou réduisez sa qualité avant de l’envoyer.',
   { next: ['quota', 'send_photo', 'missing'] });
-T('quota', 'Pourquoi mon espace de médias est-il plein ?', ['quota', 'espace plein', 'stockage plein', 'gerer medias', 'liberer espace', 'liberer de la place', 'quota depasse', 'plus de place', 'espace media', 'depasse le quota'],
-  'Chaque discussion dispose d’un quota de médias de **100 Mo**, partagé entre les participants (par groupe pour un groupe). Quand il est atteint, Piaf propose « Gérer les médias » : supprimez des photos ou vidéos **pour tout le monde** pour libérer de l’espace. Télécharger un fichier ne libère pas d’espace sur le serveur ; seule la suppression le fait.',
-  { next: ['gallery', 'delete_msg', 'media_limits'] });
+T('quota', 'Pourquoi mon espace de médias est-il plein ?', ['quota', 'espace plein', 'stockage plein', 'quota depasse', 'espace media', 'depasse le quota', 'espace utilise', 'combien d espace'],
+  'Chaque discussion dispose d’un quota de médias de **100 Mo**, partagé entre les participants (par groupe pour un groupe) ; les **photos, vidéos et audio** (messages vocaux compris) comptent tous. Quand il est atteint, les nouveaux envois sont bloqués : supprimez des médias **pour tout le monde** pour libérer de l’espace. Télécharger un fichier ne libère pas d’espace sur le serveur ; seule la suppression le fait.',
+  { acts: [A('Voir l’espace utilisé par discussion', 'space')], next: ['free_space', 'gallery', 'media_limits'] });
 T('gallery', 'Où retrouver les photos et vidéos d’une discussion ?', ['galerie', 'medias partages', 'voir photos recues', 'retrouver photos', 'toutes les photos', 'telecharger photo', 'enregistrer photo', 'telecharger video', 'sauvegarder photo', 'visionneuse'],
   'Dans la discussion, menu en haut → **« Médias partagés »** : toutes les photos et vidéos en grille, avec la visionneuse plein écran. Pour enregistrer un fichier, touchez son message → « Télécharger ». Les galeries chargent les fichiers d’origine : sur réseau mobile, cela peut consommer des données.',
   { next: ['quota', 'send_photo'] });
 T('delete_media', 'Comment supprimer une photo envoyée ?', ['supprimer photo', 'supprimer video', 'effacer photo', 'effacer video', 'retirer photo', 'photo envoyee par erreur', 'supprimer un media', 'supprimer media'],
   'Touchez la photo ou la vidéo → **« Supprimer pour tout le monde »** : le fichier disparaît de la discussion et il est **réellement supprimé du serveur**, ce qui libère votre quota. « Supprimer pour moi » ne la masque que chez vous. Les copies déjà téléchargées par d’autres restent, bien sûr, sur leurs appareils.',
   { next: ['quota', 'delete_msg'] });
+
+// ---- Sondages, listes de tâches, audio, espace de médias, mentions
+T('poll_create', 'Comment créer un sondage ?', ['sondage', 'sondages', 'creer sondage', 'creer un sondage', 'faire un sondage', 'nouveau sondage', 'lancer un sondage', 'organiser un vote', 'creer un vote', 'poser une question a tout le monde', 'proposer plusieurs options'],
+  'Dans une discussion (à deux ou en groupe), touchez le **trombone** puis **« Sondage »**. Saisissez votre question (300 caractères au plus) et **2 à 12 options** (100 caractères chacune). Réglages possibles : **choix multiples** ou choix unique, **vote anonyme**, **ajout d’options par les membres**, et une **clôture automatique** facultative à la date de votre choix. Le sondage s’affiche comme un message de la discussion, et les résultats se mettent à jour en direct.',
+  { next: ['poll_vote', 'poll_edit', 'todo_create', 'groups_intro'] });
+T('poll_vote', 'Comment voter à un sondage ?', ['voter', 'comment voter', 'voter sondage', 'voter a un sondage', 'changer mon vote', 'retirer mon vote', 'vote anonyme', 'sondage anonyme', 'qui a vote', 'voir les votes', 'resultats du sondage', 'resultat sondage', 'choix multiples', 'plusieurs reponses sondage', 'vote'],
+  'Touchez une option directement dans le message du sondage ; touchez-la de nouveau pour **retirer votre vote**. En choix unique, voter pour une autre option **déplace** votre vote ; en choix multiples, vous pouvez en cocher plusieurs. Dans un sondage **anonyme**, personne ne voit qui a voté quoi : les votes individuels ne sont jamais transmis aux autres membres. Sinon, les noms apparaissent sous chaque option. Un sondage **clos** n’accepte plus de vote.',
+  { next: ['poll_edit', 'poll_create'] });
+T('poll_edit', 'Comment modifier ou clore un sondage ?', ['modifier sondage', 'modifier un sondage', 'clore sondage', 'clore un sondage', 'cloturer sondage', 'fermer sondage', 'rouvrir sondage', 'ajouter une option', 'ajouter option sondage', 'sondage erreur', 'cloture automatique', 'terminer sondage', 'parametres du sondage', 'parametres sondage'],
+  'Touchez le message du sondage : le menu propose **« Modifier le sondage »** (question, options, choix multiples, anonymat, ajout d’options, clôture automatique) et **« Clore le sondage »** — ou **« Rouvrir le sondage »** s’il est clos. Seuls **l’auteur et les administrateurs** du groupe peuvent les utiliser. Les autres membres peuvent ajouter une option uniquement si l’auteur a autorisé « Les membres peuvent ajouter des options ».',
+  { next: ['poll_vote', 'poll_create'] });
+T('todo_create', 'Comment créer une liste de tâches ?', ['liste de taches', 'listes de taches', 'todo', 'to do', 'todo list', 'to do list', 'creer une liste', 'liste de courses', 'checklist', 'liste partagee', 'taches partagees', 'liste collaborative', 'liste a cocher', 'tache', 'taches'],
+  'Dans une discussion, touchez le **trombone** puis **« Liste de tâches »**. Donnez un **titre** (100 caractères), puis, si vous voulez, saisissez des **éléments, un par ligne** (50 au plus à la création, 200 caractères chacun). Vous réglez aussi qui peut agir : **« Les membres peuvent ajouter et modifier des éléments »** et **« Les membres peuvent cocher les éléments »**. La liste est partagée : chacun la voit évoluer en direct, avec une barre de progression.',
+  { next: ['todo_use', 'todo_settings', 'poll_create'] });
+T('todo_use', 'Comment cocher, assigner ou effacer des tâches ?', ['cocher', 'cocher une tache', 'cocher un element', 'assigner une tache', 'assigner un element', 'attribuer une tache', 'effacer les termines', 'supprimer les taches terminees', 'ajouter une tache', 'ajouter un element', 'modifier une tache', 'qui a coche', 'tache terminee', 'supprimer une tache'],
+  'Dans la liste : touchez la **case** pour cocher ou décocher (le nom de la personne qui l’a faite s’affiche). **« + Élément »** ajoute une tâche. Touchez le **texte** d’un élément pour **« Modifier le texte »**, **« Assigner à… »** (dans un groupe) ou **« Supprimer l’élément »**. **« Effacer les terminés »** retire d’un coup tout ce qui est coché. Ces actions dépendent des droits réglés par l’auteur de la liste.',
+  { next: ['todo_settings', 'todo_create'] });
+T('todo_settings', 'Qui peut cocher ou ajouter des éléments à une liste ?', ['droits liste', 'qui peut cocher', 'qui peut ajouter', 'parametres de la liste', 'parametres liste', 'les membres peuvent cocher', 'membres peuvent ajouter', 'liste en lecture seule', 'permissions liste', 'ajout reserve'],
+  'Cela dépend des **paramètres de la liste**. L’auteur et les administrateurs ont toujours la main ; les autres membres peuvent **ajouter / modifier** des éléments seulement si « Les membres peuvent ajouter et modifier des éléments » est activé, et **cocher** seulement si « Les membres peuvent cocher les éléments » l’est. Pour les changer : touchez le message de la liste puis **« Paramètres de la liste »**. Si vous voyez « Ajout réservé à l’auteur et aux administrateurs », c’est que l’ajout est désactivé pour les membres.',
+  { next: ['todo_use', 'todo_create', 'group_roles'] });
+T('voice_send', 'Comment envoyer un message vocal ?', ['message vocal', 'messages vocaux', 'vocal', 'vocaux', 'envoyer un vocal', 'enregistrer un message vocal', 'enregistrer un vocal', 'enregistrement vocal', 'micro', 'dicter', 'envoyer un audio', 'note vocale', 'memo vocal', 'enregistrer ma voix'],
+  'Dans une discussion, quand le champ de message est **vide**, le bouton d’envoi laisse la place à un **micro** : touchez-le pour enregistrer (**10 minutes au maximum**). Terminez avec **« Envoyer le message vocal »**, ou **« Annuler l’enregistrement »**. Un message trop court n’est pas envoyé. Le navigateur demande l’autorisation du micro la première fois. Le vocal apparaît avec un lecteur (position, **vitesse de lecture**) et **compte dans le quota** de médias de la discussion.',
+  { next: ['audio_file', 'audio_problem', 'free_space'] });
+T('audio_file', 'Comment envoyer un fichier audio ?', ['fichier audio', 'fichiers audio', 'envoyer de la musique', 'envoyer un mp3', 'mp3', 'm4a', 'formats audio', 'taille audio', 'audio trop gros', 'musique', 'lecteur audio', 'vitesse de lecture', 'ecouter audio', 'telecharger audio', 'audio'],
+  'Touchez le **trombone** puis **« Fichier audio »**. Formats acceptés : **MP3, M4A, AAC, OGG, WAV et WebM**, **10 Mo au maximum par fichier**. Le lecteur permet de **lire, se déplacer dans l’enregistrement et changer la vitesse**. Les audios (vocaux compris) sont rangés dans **« Médias partagés »** sous le filtre **Audio** et comptent dans le quota de 100 Mo de la discussion.',
+  { next: ['voice_send', 'audio_problem', 'quota'] });
+T('audio_problem', 'Le micro ou la lecture audio ne fonctionne pas', ['micro refuse', 'micro ne marche pas', 'pas de son', 'impossible d enregistrer', 'enregistrement impossible', 'autorisation micro', 'acces au micro', 'format d enregistrement', 'audio ne se lit pas', 'lecture impossible', 'vocal ne marche pas', 'probleme audio', 'probleme micro', 'probleme vocal'],
+  'Pour un **micro refusé** : autorisez-le pour ce site dans les réglages du navigateur (sur iPhone : Réglages → Safari, ou l’application installée), puis réessayez. Si le message indique que le **format d’enregistrement n’est pas pris en charge**, mettez le navigateur à jour (Chrome, Safari ou Firefox récents). En cas de « **Lecture impossible** », vérifiez la connexion et réessayez : le fichier est téléchargé à la demande. Vérifiez aussi que le son de l’appareil n’est pas coupé.',
+  { next: ['voice_send', 'audio_file', 'bug'] });
+T('free_space', 'Comment libérer de l’espace de médias ?', ['liberer espace', 'liberer de la place', 'liberer de l espace', 'gerer medias', 'gerer l espace', 'faire de la place', 'supprimer des medias', 'nettoyer medias', 'vider medias', 'gagner de la place', 'plus de place', 'espace de stockage', 'stockage', 'que supprimer', 'plus gros fichiers', 'plus gros medias', 'espace disponible', 'espace restant', 'supprimer pour tout le monde media'],
+  'Chaque discussion a **100 Mo** de médias (photos, vidéos et audio), partagés par ses participants. Pour en libérer :\n1. Ouvrez la discussion → menu → **« Médias partagés »** : la barre du haut indique l’espace utilisé et restant.\n2. Filtrez par **Photos, Vidéos ou Audio** et repérez les fichiers lourds (la taille est affichée dessus).\n3. Ouvrez un média → **« Supprimer pour tout le monde »** : il est réellement effacé du serveur. Pour un audio ou un vocal, supprimez le **message** pour tout le monde depuis la discussion.\nTélécharger ou « supprimer pour moi » ne libère rien : enregistrez d’abord ce que vous voulez garder. Je peux vous montrer quelles discussions pèsent le plus.',
+  { acts: [A('Voir l’espace utilisé par discussion', 'space')], next: ['quota', 'delete_media', 'gallery'] });
+T('mention_help', 'Comment mentionner quelqu’un avec @ ?', ['mentionner', 'mention', 'mentions', 'arobase', 'taguer', 'identifier quelqu un', 'mentionner un contact', 'mentionner quelqu un', 'citer quelqu un'],
+  'Tapez **@** dans le champ de message : la liste de vos contacts apparaît ; touchez un nom pour l’insérer. Dans une discussion de groupe, la personne mentionnée voit un repère « Vous avez été mentionné(e) » et sa notification passe même si le groupe est en silence. Avec moi, « @Marie » désigne un contact : **« écris à @Marie : j’arrive »** prépare le message, **« ouvre @Marie »** ouvre la discussion, **« mets @Marie en favori »** prépare l’action. Dans une autre discussion, **@Talk2Piaf** me fait répondre.',
+  { next: ['what_can_you_do', 'send_msg', 'groups_intro'] });
+T('search_engine', 'Comment changer le moteur de recherche ?', ['moteur de recherche', 'moteurs de recherche', 'changer le moteur', 'google', 'duckduckgo', 'bing', 'qwant', 'ecosia', 'brave', 'startpage', 'moteur par defaut', 'parametre recherche'],
+  (c) => ({ text: `Quand je vous propose une recherche, j’utilise **${engineOf(c.search).name}**. Pour en changer : **Paramètres → Assistant Talk2Piaf → Moteur de recherche**. Vous pouvez choisir DuckDuckGo, Google, Bing, Qwant, Ecosia, Brave Search ou Startpage, ou saisir votre propre adresse (https, avec %s à la place de la requête). Ce réglage reste **sur cet appareil**. Pour lancer une recherche : « cherche recettes de crêpes sur le web ».` }),
+  { acts: [A('Ouvrir les paramètres', 'go', { h: '#/settings' })], next: ['what_can_you_do', 'general'] });
 
 // ---- Groupes
 T('groups_intro', 'Comment fonctionnent les groupes ?', ['groupe', 'groupes', 'discussion de groupe', 'conversation de groupe', 'discussion a plusieurs', 'a plusieurs', 'groupe piaf'],
@@ -300,7 +355,7 @@ T('bug', 'Piaf ne fonctionne pas correctement', ['bug', 'probleme', 'ca marche p
   'Essayons dans l’ordre :\n• vérifiez votre connexion (bandeau « Hors connexion » en haut)\n• actualisez vos discussions\n• rechargez l’application, puis videz son cache si le problème persiste\n• si la session est terminée, reconnectez-vous avec votre identifiant et votre code\n• pour un fichier refusé : vérifiez le format et la taille\nSi rien ne change, notez le message d’erreur affiché et signalez-le à l’éditeur de l’application.',
   { acts: [A('Actualiser mes discussions', 'refresh'), A('Recharger l’application', 'reload'), A('Vider le cache et recharger', 'clearcache')], next: ['connection', 'update', 'media_limits'] });
 T('limits', 'Quelles sont les limites de Piaf ?', ['limite', 'limites', 'quotas', 'recapitulatif', 'maximum', 'plafond', 'restrictions', 'tableau des limites'],
-  'Les principales limites (valeurs par défaut) :\n• message : **4 000 caractères**\n• photo : **10 Mo** ; vidéo : **25 Mo** ; **10 fichiers** par envoi\n• médias : **100 Mo** par discussion ou par groupe\n• groupe : **32 personnes**\n• messages épinglés : **5** par discussion\n• modification d’un message : **24 h** ; suppression pour tous (texte) : **48 h**\n• réactions : **6** emojis\n• nom d’affichage : 40 caractères ; code secret : 8 à 64 caractères',
+  'Les principales limites (valeurs par défaut) :\n• message : **4 000 caractères**\n• photo : **10 Mo** ; vidéo : **25 Mo** ; **10 fichiers** par envoi\n• médias (photos, vidéos et audio) : **100 Mo** par discussion ou par groupe\n• audio : **10 Mo** par fichier ; message vocal : **10 minutes**\n• sondage : **2 à 12 options** ; liste de tâches : **50 éléments** à la création\n• groupe : **32 personnes**\n• messages épinglés : **5** par discussion\n• modification d’un message : **24 h** ; suppression pour tous (texte) : **48 h**\n• réactions : **6** emojis\n• nom d’affichage : 40 caractères ; code secret : 8 à 64 caractères',
   { next: ['media_limits', 'quota', 'group_limits'] });
 T('contact_dev', 'Comment contacter l’éditeur de Piaf ?', ['suggestion', 'idee amelioration', 'contacter developpeur', 'contacter editeur', 'contact', 'remarque', 'signaler un bug', 'support', 'assistance', 'service client', 'avis', 'ameliorer piaf', 'proposition'],
   'Piaf est développé par **Ehorg**. Les coordonnées de l’éditeur sont indiquées dans la page **Confidentialité** (quand elles sont renseignées) : c’est le bon endroit pour envoyer une suggestion, un signalement de bug ou une demande concernant vos données.',
@@ -308,8 +363,8 @@ T('contact_dev', 'Comment contacter l’éditeur de Piaf ?', ['suggestion', 'ide
 
 // ---- À propos de l'assistant
 T('what_can_you_do', 'Que peux-tu faire ?', ['aide', 'aide moi', 'help', 'que peux tu faire', 'que sais tu faire', 'tes capacites', 'tes fonctions', 'comment ca marche', 'a quoi tu sers', 'que sais tu', 'quoi demander', 'menu', 'possibilites assistant', 'peux tu m aider', 'besoin d aide', 'sujets'],
-  'Je suis l’assistant de Piaf. Je peux :\n• **répondre** à vos questions sur le compte, les discussions, les groupes, les médias, la sécurité et les réglages\n• **agir à votre place** par des boutons : ouvrir un écran, démarrer une discussion avec un identifiant, mettre une discussion en favori, changer le thème, activer les notifications, inviter un ami, envoyer un message…\n• vous donner **l’heure**, **calculer**, tirer au sort, raconter une **blague**, aider à écrire un message\n• vous orienter vers des **liens** utiles\nPar exemple : « écris à Marie : j’arrive », « mes messages non lus », « 18 % de 240 », « idées de nom de groupe ».',
-  { next: ['features', 'invite', 'security_tips', 'joke', 'msg_ideas'] });
+  'Je suis l’assistant de Piaf. Je peux :\n• **répondre** à vos questions sur le compte, les discussions, les groupes, les médias, la sécurité et les réglages\n• **agir à votre place** par des boutons : ouvrir un écran, démarrer une discussion avec un identifiant, mettre une discussion en favori, changer le thème, activer les notifications, inviter un ami, envoyer un message…\n• **vous guider** sur les sondages, les listes de tâches, les messages vocaux et l’espace de médias\n• comprendre une **mention** : écrivez « @ » pour choisir un contact\n• vous donner **l’heure**, **calculer**, tirer au sort, raconter une **blague**, aider à écrire un message\n• vous orienter vers des **liens** utiles\nPar exemple : « écris à @Marie : j’arrive », « mes messages non lus », « libérer de l’espace », « comment créer un sondage ? ».',
+  { next: ['features', 'poll_create', 'free_space', 'security_tips', 'joke'] });
 T('who_are_you', 'Qui es-tu ?', ['qui es tu', 'tu es qui', 'presente toi', 'ton nom', 'comment tu t appelles', 'talk2piaf', 'talk to piaf', 'tu t appelles comment', 'qui est talk2piaf'],
   'Je suis **Talk2Piaf**, l’assistant intégré à Piaf. Je réponds à vos questions sur l’application, je peux réaliser des actions à votre place d’une simple pression sur un bouton, et je m’occupe aussi de quelques petits services du quotidien.',
   { next: ['what_can_you_do', 'who_made', 'are_you_ai'] });
@@ -420,7 +475,7 @@ T('msg_ideas', 'Aide pour écrire un message', ['idee message', 'aide pour ecrir
   },
   { next: ['send_msg', 'what_can_you_do'] });
 T('general', 'Que sais-tu en dehors de Piaf ?', ['culture generale', 'recette', 'recettes', 'histoire de', 'geographie', 'actualite', 'actualites', 'news', 'sport score', 'horoscope', 'resultat match', 'qui est', 'c est qui', 'cuisine', 'devoir', 'exercice'],
-  (c, qn, q) => ({ text: 'Mon domaine, c’est Piaf et quelques petits services (heure, calculs, tirages, blagues, aide à la rédaction). Pour une question de culture générale, une actualité ou une recette, je ne peux pas vous répondre de façon fiable : je vous propose plutôt de lancer la recherche sur une source sérieuse.', links: webLinks(q) }),
+  (c, qn, q) => ({ text: 'Mon domaine, c’est Piaf et quelques petits services (heure, calculs, tirages, blagues, aide à la rédaction). Pour une question de culture générale, une actualité ou une recette, je ne peux pas vous répondre de façon fiable : je vous propose plutôt de lancer la recherche sur une source sérieuse.', links: webLinks(q, c) }),
   { prio: 0.9, next: ['what_can_you_do'] });
 
 // ------------------------------------------------------------------ commandes dynamiques (état réel de l'application)
@@ -464,6 +519,36 @@ function calc(expr) {
 }
 const fmtNum = (v) => (Number.isInteger(v) && Math.abs(v) < 1e15) ? v.toLocaleString('fr-FR') : Number(v.toPrecision(12)).toLocaleString('fr-FR', { maximumFractionDigits: 10 });
 
+
+// message prêt à envoyer : le bouton « Envoyer » est à usage unique (action « send »), rien ne part avant l'appui
+function sendPrep(found, label, body, ctx) {
+  if (!found.length) return { text: `Je ne trouve aucune discussion dont le nom ressemble à « ${label} ». Vérifiez l’orthographe, ou démarrez d’abord une discussion avec cette personne (par son identifiant à 8 chiffres).`, acts: [A('Nouvelle discussion', 'go', { h: '#/new' })], topic: 'send_cmd' };
+  const ok = found.filter((c) => !c.blocked);
+  if (!ok.length) return { text: `Vous avez bloqué **${found[0].name}** : vous ne pouvez plus lui écrire tant que le blocage dure. Débloquez-la depuis la discussion ou dans Paramètres → Contacts bloqués.`, acts: [A('Ouvrir les paramètres', 'go', { h: '#/settings' }), A('Débloquer ' + found[0].name, 'unblock', { id: found[0].id, n: found[0].name })], topic: 'send_cmd' };
+  if (body.length > 4000) return { text: 'Ce message dépasse 4 000 caractères : raccourcissez-le un peu.', topic: 'send_cmd' };
+  const who = ok.length === 1 ? `**${ok[0].name}**` : 'l’une de ces discussions';
+  return { text: `Message prêt pour ${who} :\n« ${body} »\nAppuyez sur le bouton pour l’envoyer : rien ne part avant.`, acts: ok.map((c) => A('Envoyer à ' + convLabel(c), 'send', { id: c.id, t: body, n: c.name })), topic: 'send_cmd' };
+}
+
+// @contact : renvoie { found, before, rest } si le message contient « @Nom » correspondant à une discussion (nom complet, sinon prénom)
+function mentionOf(q, ctx) {
+  const convs = (ctx && ctx.convs) || []; if (!convs.length) return null;
+  const at = q.indexOf('@'); if (at < 0) return null;
+  const before = q.slice(0, at), after = q.slice(at + 1);
+  const toks = [...after.matchAll(/\S+/g)].map((m) => ({ w: m[0], end: m.index + m[0].length }));
+  if (!toks.length) return null;
+  const clean = (w) => w.replace(/[:,;.!?»"”]+$/g, '');
+  for (let k = Math.min(toks.length, 5); k >= 1; k--) {
+    const nc = norm(toks.slice(0, k).map((t) => clean(t.w)).join(' ')); if (!nc) continue;
+    let hits = convs.filter((c) => norm(c.name) === nc);
+    if (!hits.length && k === 1) hits = convs.filter((c) => !c.group && norm(c.name).split(' ')[0] === nc);
+    if (hits.length) return { found: hits, before, rest: after.slice(toks[k - 1].end).replace(/^[\s:,;–—-]+/, '').trim() };
+  }
+  return null;
+}
+const SEND_LEAD = /^(?:peux[- ]tu\s+|pouvez[- ]vous\s+|tu peux\s+|vous pouvez\s+)?(?:(?:envoie|envoi|envoyer|ecris|ecrire|dis|dire|transmets|transmettre)(?:[- ]moi)?\s*(?:un message |le message |un mot |un texte )?(?:a |au |aux |pour )?|message (?:a|pour) |mot (?:a|pour) )?$/;
+const OPEN_LEAD = /^(?:peux[- ]tu\s+|pouvez[- ]vous\s+)?(?:ouvre|ouvrir|affiche|afficher|montre|montrer|va chez|va voir|aller voir|aller chez|parle a|parler a|discute avec|discuter avec|contacte|contacter|retourne chez|retrouve|trouve)?\s*(?:la discussion (?:avec|de)|la conversation (?:avec|de)|le groupe)?\s*$/;
+
 const HANDLERS = [
   // 1. détresse : réponse calme et ressources, sans autre suggestion
   (q, qn) => {
@@ -481,19 +566,24 @@ const HANDLERS = [
     if (known) return { text: `Vous avez déjà une discussion avec **${known.name}** (identifiant ${pretty}).`, acts: [A('Ouvrir la discussion', 'conv', { id: known.id })], topic: 'start_by_id' };
     return { text: `Souhaitez-vous démarrer une discussion avec l’identifiant **${pretty}** ? Si la personne existe, la discussion s’ouvre aussitôt ; sinon je vous le dirai.`, acts: [A(`Démarrer avec ${pretty}`, 'start', { pid: id })], topic: 'start_by_id' };
   },
+  // 2b. « @Marie : j'arrive », « écris à @Marie que… », « ouvre @Marie » (mention d'un contact)
+  (q, qn, qt, ctx) => {
+    const m = mentionOf(q, ctx); if (!m) return null;
+    const lead = norm(m.before);
+    if (m.rest && SEND_LEAD.test(lead)) {
+      const body = cap(m.rest.replace(/^(?:que|qu['’]|pour dire(?: que)?|disant(?: que)?)\s*/i, '').replace(/^[«"“]\s*|\s*[»"”]$/g, '').trim());
+      if (!body) return null;
+      return sendPrep(m.found, m.found[0].name, body, ctx);
+    }
+    if (!m.rest && OPEN_LEAD.test(lead)) return { text: m.found.length > 1 ? 'Plusieurs discussions correspondent — laquelle ?' : `Voici la discussion « ${m.found[0].name} » :`, acts: m.found.slice(0, 4).map((c) => A('Ouvrir ' + convLabel(c), 'conv', { id: c.id })), topic: 'conv_list', chips: [] };
+    return null;
+  },
   // 3. « écris à Marie : j'arrive » → message prêt à envoyer (bouton)
   (q, qn, qt, ctx) => {
-    const m = q.match(/^\s*(?:peux[- ]tu\s+|pouvez[- ]vous\s+|tu peux\s+|vous pouvez\s+)?(?:envoie|envoi|envoyer|écris|ecris|écrire|ecrire|dis|dire|transmets|transmettre)(?:[- ]moi)?\s+(?:un message |le message |un mot |un texte )?(?:à|a|au|aux)\s+(.{1,60}?)\s*(?::|,\s*que\s|\sque\s|\sdisant\s|\spour dire\s|\squ’|\squ')\s*(.{1,4000})$/i);
+    const m = q.match(/^\s*(?:peux[- ]tu\s+|pouvez[- ]vous\s+|tu peux\s+|vous pouvez\s+)?(?:envoie|envoi|envoyer|écris|ecris|écrire|ecrire|dis|dire|transmets|transmettre)(?:[- ]moi)?\s+(?:un message |le message |un mot |un texte )?(?:à|a|au|aux)\s+@?(.{1,60}?)\s*(?::|,\s*que\s|\sque\s|\sdisant\s|\spour dire\s|\squ’|\squ')\s*(.{1,4000})$/i);
     if (!m) return null;
     let body = m[2].trim().replace(/^[«"“]\s*|\s*[»"”]$/g, '').trim(); if (!body) return null;
-    body = cap(body);
-    const found = findConvs(norm(m[1]), ctx);
-    if (!found.length) return { text: `Je ne trouve aucune discussion dont le nom ressemble à « ${m[1].trim()} ». Vérifiez l’orthographe, ou démarrez d’abord une discussion avec cette personne (par son identifiant à 8 chiffres).`, acts: [A('Nouvelle discussion', 'go', { h: '#/new' })], topic: 'send_cmd' };
-    const ok = found.filter((c) => !c.blocked);
-    if (!ok.length) return { text: `Vous avez bloqué **${found[0].name}** : vous ne pouvez plus lui écrire tant que le blocage dure. Débloquez-la depuis la discussion ou dans Paramètres → Contacts bloqués.`, acts: [A('Ouvrir les paramètres', 'go', { h: '#/settings' })], topic: 'send_cmd' };
-    if (body.length > 4000) return { text: 'Ce message dépasse 4 000 caractères : raccourcissez-le un peu.', topic: 'send_cmd' };
-    const who = ok.length === 1 ? `**${ok[0].name}**` : 'l’une de ces discussions';
-    return { text: `Message prêt pour ${who} :\n« ${body} »\nAppuyez sur le bouton pour l’envoyer : rien ne part avant.`, acts: ok.map((c) => A('Envoyer à ' + convLabel(c), 'send', { id: c.id, t: body, n: c.name })), topic: 'send_cmd' };
+    return sendPrep(findConvs(norm(m[1]), ctx), m[1].trim(), cap(body), ctx);
   },
   // 4. mes identifiant / nom / chiffres
   (q, qn, qt, ctx) => {
@@ -536,13 +626,19 @@ const HANDLERS = [
     if (!ctx.convs || !ctx.convs.length) return null;
     if (/^(comment|pourquoi|qu est ce|est ce que|c est quoi|quel|quelle)\b/.test(qn)) return null;
     const verbs = {
-      fav: /\b(favori|favoris)\b/, arch: /\b(archive|archiver|desarchive|desarchiver)\b/, mute: /\b(silence|muet|mute|sourdine|reactive|reactiver)\b/,
+      block: /\b(bloque|bloquer|debloque|debloquer)\b/, fav: /\b(favori|favoris)\b/, arch: /\b(archive|archiver|desarchive|desarchiver)\b/, mute: /\b(silence|muet|mute|sourdine|reactive|reactiver)\b/,
       gallery: /\b(medias|photos|videos|galerie)\b/, group: /\b(membres|infos|info)\b/, open: /\b(ouvre|ouvrir|affiche|afficher|montre|montrer|va|aller|retourne|retrouve|trouve|ecris|ecrire|parle|parler|discute|discuter|contacte|contacter)\b/,
     };
-    const kind = verbs.fav.test(qn) ? 'fav' : verbs.arch.test(qn) ? 'arch' : verbs.mute.test(qn) ? 'mute' : verbs.gallery.test(qn) && verbs.open.test(qn) ? 'gallery' : verbs.group.test(qn) && verbs.open.test(qn) ? 'group' : verbs.open.test(qn) ? 'open' : null;
+    const kind = verbs.block.test(qn) ? 'block' : verbs.fav.test(qn) ? 'fav' : verbs.arch.test(qn) ? 'arch' : verbs.mute.test(qn) ? 'mute' : verbs.gallery.test(qn) && verbs.open.test(qn) ? 'gallery' : verbs.group.test(qn) && verbs.open.test(qn) ? 'group' : verbs.open.test(qn) ? 'open' : null;
     if (!kind) return null;
     const found = findConvs(qn, ctx); if (!found.length) return null;
     const off = /\b(retire|retirer|enleve|enlever|supprime|supprimer|plus en favori|desarchive|desarchiver|reactive|reactiver|desactive|desactiver)\b/.test(qn);
+    if (kind === 'block') {
+      const direct = found.filter((c) => !c.group), unb = /\bdebloqu/.test(qn);
+      if (!direct.length) return { text: 'On ne peut pas bloquer un groupe : vous pouvez le **quitter** (menu du groupe) ou le **mettre en silence**.', acts: found.slice(0, 3).map((c) => A('Ouvrir ' + c.name, 'conv', { id: c.id })), topic: 'block', chips: [] };
+      const acts = direct.map((c) => unb ? A('Débloquer ' + c.name, 'unblock', { id: c.id, n: c.name }) : c.blocked ? A(c.name + ' est déjà bloqué·e', 'go', { h: '#/settings' }) : A('Bloquer ' + c.name, 'block', { id: c.id, n: c.name }));
+      return { text: direct.length > 1 ? 'Plusieurs discussions correspondent — laquelle ?' : unb ? 'C’est prêt : appuyez sur le bouton pour débloquer.' : `Bloquer **${direct[0].name}** l’empêche de vous écrire, et vous ne pourrez plus lui écrire non plus. Appuyez sur le bouton pour confirmer : une confirmation vous sera demandée.`, acts, topic: 'block', chips: [] };
+    }
     const mk = (c) => {
       if (kind === 'open') return A('Ouvrir ' + convLabel(c), 'conv', { id: c.id });
       if (kind === 'gallery') return A('Médias de ' + convLabel(c), 'gallery', { id: c.id });
@@ -613,6 +709,16 @@ const HANDLERS = [
     }
     return null;
   },
+  // 11. « cherche … sur le web », « google … » → lien vers le moteur de recherche choisi dans Paramètres
+  (q, qn, qt, ctx) => {
+    let m = q.match(/^\s*(?:peux[- ]tu\s+|pouvez[- ]vous\s+)?(?:cherche|chercher|recherche|rechercher|trouve|trouver)(?:[- ]moi)?\s+(.{2,200}?)\s+(?:sur|dans|avec|via)\s+(?:le web|internet|google|le net|un moteur de recherche|le moteur de recherche|mon moteur de recherche|ma recherche web|duckduckgo|bing|qwant|ecosia|brave|startpage)\s*[?.!]*\s*$/i)
+      || q.match(/^\s*(?:peux[- ]tu\s+|pouvez[- ]vous\s+)?(?:cherche|chercher|recherche|rechercher|trouve|trouver)(?:[- ]moi)?\s+(?:sur|dans)\s+(?:le web|internet|google|le net|un moteur de recherche|le moteur de recherche)\s*(?::|,)?\s*(.{2,200}?)\s*[?.!]*\s*$/i)
+      || q.match(/^\s*(?:google|googler|googlise|recherche web|recherche internet|recherche en ligne)\s*(?::|,)?\s+(.{2,200}?)\s*[?.!]*\s*$/i);
+    if (!m) return null;
+    const term = m[1].trim().replace(/^[«"“]|[»"”]$/g, ''); if (!term) return null;
+    const e = engineOf(ctx.search);
+    return { text: `Voici votre recherche « ${term} » avec **${e.name}**. Le lien s’ouvre dans un nouvel onglet ; je ne vois pas les résultats. Vous pouvez changer de moteur dans les paramètres.`, links: [LK(`Chercher « ${term.length > 36 ? term.slice(0, 36) + '…' : term} » avec ${e.name}`, e.url.replace('%s', enc(term)))], acts: [A('Changer de moteur de recherche', 'go', { h: '#/settings' })], topic: 'search_engine', chips: [] };
+  },
 ];
 
 // ------------------------------------------------------------------ moteur
@@ -637,10 +743,11 @@ function starters() {
   return [
     { l: 'Que peux-tu faire ?', t: 'Que peux-tu faire ?' }, { l: 'Mon identifiant', t: 'Quel est mon identifiant ?' }, { l: 'Créer un groupe', t: 'Comment créer un groupe ?' },
     { l: 'Inviter un ami', t: 'Comment inviter un ami sur Piaf ?' }, { l: 'Installer Piaf', t: 'Comment installer Piaf sur mon téléphone ?' }, { l: 'Mes messages non lus', t: 'Mes messages non lus' },
-    { l: 'Sécuriser mon compte', t: 'Comment sécuriser mon compte ?' }, { l: 'Une blague', t: 'Raconte-moi une blague' },
+    { l: 'Sécuriser mon compte', t: 'Comment sécuriser mon compte ?' }, { l: 'Créer un sondage', t: 'Comment créer un sondage ?' }, { l: 'Libérer de l’espace', t: 'Comment libérer de l’espace de médias ?' }, { l: 'Une blague', t: 'Raconte-moi une blague' },
   ];
 }
-const webLinks = (q) => [LK('Chercher sur Wikipédia', 'https://fr.wikipedia.org/w/index.php?search=' + enc(q)), LK('Chercher sur le web', 'https://duckduckgo.com/?q=' + enc(q))];
+const searchLink = (q, ctx) => { const e = engineOf(ctx && ctx.search); return LK('Chercher avec ' + e.name, e.url.replace('%s', enc(q))); };
+const webLinks = (q, ctx) => [LK('Chercher sur Wikipédia', 'https://fr.wikipedia.org/w/index.php?search=' + enc(q)), searchLink(q, ctx)];
 
 function finish(r, topic, o) {
   const out = { text: r.text, links: r.links || [], acts: r.acts || [], chips: r.chips, topic: r.topic || (topic && topic.id) || null };
@@ -702,7 +809,7 @@ function reply(text, ctx, mem) {
   return {
     text: near.length ? 'Je ne suis pas certain d’avoir compris. Voulez-vous parler de l’un de ces sujets ? Vous pouvez aussi reformuler avec d’autres mots.'
       : (words >= 2 ? 'Je n’ai pas de réponse fiable à cette question : mon domaine, c’est Piaf et quelques petits services du quotidien. Je peux en revanche vous orienter vers une source de recherche, ou vous proposer ce que je sais faire.' : 'Je n’ai pas bien compris. Pouvez-vous reformuler ? Voici quelques sujets sur lesquels je peux vous aider.'),
-    links: words >= 2 && !near.length ? webLinks(q) : [], acts: [], chips: chips.slice(0, 4), topic: null, unknown: true,
+    links: words >= 2 && !near.length ? webLinks(q, ctx) : [], acts: [], chips: chips.slice(0, 4), topic: null, unknown: true,
   };
 }
 
@@ -718,6 +825,6 @@ function passphrase(randInt) {
   return out.join('-') + '-' + String(10 + ri(90));
 }
 
-const api = { reply, norm, stem, stems, TOPICS, BY_ID, starters, passphrase, WORDS, calc, findConvs, setRand(fn) { rand = fn || Math.random; } };
+const api = { reply, ENGINES, engineOf, validEngineUrl, norm, stem, stems, TOPICS, BY_ID, starters, passphrase, WORDS, calc, findConvs, setRand(fn) { rand = fn || Math.random; } };
 if (typeof module === 'object' && module.exports) module.exports = api; else root.T2P = api;
 })(typeof window !== 'undefined' ? window : globalThis);

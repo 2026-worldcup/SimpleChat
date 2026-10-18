@@ -2,7 +2,8 @@
    Le moteur de réponse (assistant-kb.js) tourne sur l'appareil : rien de ce qui est écrit ici n'est envoyé à un serveur.
    La discussion se comporte comme les autres (liste d'accueil, favori / archive / silence / renommage, non lus, même écran),
    mais elle est locale : état et historique sont gardés dans le navigateur, par compte.
-   Les boutons d'action exécutent de vraies opérations de l'application et ne s'exécutent que sur appui. */
+   Les boutons d'action exécutent de vraies opérations de l'application et ne s'exécutent que sur appui.
+   Ils restent utilisables autant de fois qu'on veut, sauf les actions d'envoi ou de blocage (ONCE) : une fois faites, le bouton se grise. */
 (() => {
   'use strict';
   const P = window.Piaf, KB = window.T2P;
@@ -10,6 +11,12 @@
   const { h, S, api, sb, toast, errText, toCode, copyText, confirmDialog, promptDialog, store, icon, iconBtn, sheet, fmt } = P;
 
   const AID = 'talk2piaf', NAME = 'Talk2Piaf', MAX_MSGS = 80;
+  // Actions qui ne doivent partir qu'une fois (un message envoyé, un blocage…) ; tous les autres boutons restent réutilisables.
+  const ONCE = new Set(['send', 'block', 'unblock', 'revoke', 'forget']);
+  const usedUp = (a) => !!(a && a.done && ONCE.has(a.a));
+  // Moteur de recherche choisi dans Paramètres (réglage de l'appareil, jamais envoyé au serveur)
+  const SKEY = 'piaf-t2p-search';
+  const searchPref = () => { const v = store.get(SKEY, null); return v && typeof v === 'object' ? v : { id: 'ddg' }; };
   const stKey = () => 'piaf-t2p-v4-' + S.me.id;
   const OLD = (uid) => ['piaf-talk2piaf-history-v2', 'piaf-talk2piaf-v3-' + uid];
 
@@ -20,7 +27,7 @@
   function welcome() {
     const first = (S.me.display_name || '').split(/\s+/)[0];
     return { role: 'assistant', at: nowIso(), eph: false, links: [], acts: [], chips: KB.starters().slice(0, 4),
-      text: `Bonjour${first ? ' ' + first : ''} ! Je suis Talk2Piaf, l’assistant de Piaf. Posez-moi vos questions sur l’application, ou demandez-moi d’agir : je prépare l’action, et vous la lancez d’un appui sur le bouton.\nPar exemple : « écris à Marie : j’arrive », « mes messages non lus » ou « comment créer un groupe ? ».` };
+      text: `Bonjour${first ? ' ' + first : ''} ! Je suis Talk2Piaf, l’assistant de Piaf. Posez-moi vos questions sur l’application, ou demandez-moi d’agir : je prépare l’action, et vous la lancez d’un appui sur le bouton.\nTapez @ pour mentionner un contact. Par exemple : « écris à @Marie : j’arrive », « libérer de l’espace » ou « comment créer un sondage ? ».` };
   }
   function state() {
     if (!S.me) return null;
@@ -49,6 +56,26 @@
   P.assistantAvatar = (size = 44) => h('span', { class: 'avatar t2p', style: { width: size + 'px', height: size + 'px' }, 'aria-hidden': 'true' }, h('img', { src: 'icons/talk2piaf.svg', alt: '' }));
   P.openAssistant = () => P.go('#/talk2piaf');
 
+  // Section « Assistant Talk2Piaf » de l'écran Paramètres (moteur de recherche proposé par l'assistant)
+  P.assistantSettings = () => {
+    const pref = searchPref(), isCustom = pref.id === 'custom';
+    const err = h('p', { class: 'form-error small', hidden: true });
+    const url = h('input', { type: 'url', inputmode: 'url', autocomplete: 'off', placeholder: 'https://exemple.org/search?q=%s', maxlength: '300', value: isCustom && pref.url ? pref.url : '', 'aria-label': 'Adresse du moteur de recherche personnalisé' });
+    const customBox = h('div', { class: 'form-stack', hidden: !isCustom }, h('label', { class: 'field' }, h('span', null, 'Adresse de recherche'), url),
+      h('p', { class: 'muted small' }, 'Adresse en https contenant %s à l’endroit où placer la recherche. Exemple : https://exemple.org/search?q=%s'), err,
+      h('button', { class: 'btn', type: 'button', onclick: () => {
+        const v = url.value.trim();
+        if (!KB.validEngineUrl(v)) { err.textContent = 'Adresse invalide : elle doit commencer par https:// et contenir %s.'; err.hidden = false; return; }
+        err.hidden = true; store.set(SKEY, { id: 'custom', url: v }); toast('Moteur de recherche enregistré'); } }, 'Enregistrer'));
+    const sel = h('select', { 'aria-label': 'Moteur de recherche', onchange: () => {
+      if (sel.value === 'custom') { customBox.hidden = false; url.focus(); return; }
+      customBox.hidden = true; err.hidden = true; store.set(SKEY, { id: sel.value }); toast('Moteur de recherche : ' + KB.engineOf({ id: sel.value }).name); } },
+      ...KB.ENGINES.map((e) => h('option', { value: e.id, selected: pref.id === e.id }, e.name)), h('option', { value: 'custom', selected: isCustom }, 'Autre (adresse personnalisée)'));
+    return h('section', { class: 'card' }, h('h2', null, 'Assistant Talk2Piaf'),
+      h('div', { class: 'row-text' }, h('strong', null, 'Moteur de recherche'), h('span', { class: 'muted small' }, 'Utilisé quand je vous propose une recherche sur le web (« cherche … sur le web »). Réglage conservé sur cet appareil ; la recherche s’ouvre dans un nouvel onglet.')),
+      sel, customBox);
+  };
+
   // Menu ⋯ de la liste : mêmes entrées que pour les autres discussions, appliquées à l'état local.
   const origConvMenu = P.convMenu;
   P.convMenu = (c, opts = {}) => {
@@ -74,7 +101,7 @@
     const me = S.me || {};
     return {
       name: me.display_name || '', first: (me.display_name || '').split(/\s+/)[0] || '', pid: me.public_id || '', id8: me.public_id ? fmt.id8(me.public_id) : '',
-      now: new Date(), settings: S.settings || {}, perm: 'Notification' in window ? Notification.permission : 'unsupported',
+      now: new Date(), settings: S.settings || {}, search: searchPref(), perm: 'Notification' in window ? Notification.permission : 'unsupported',
       online: S.online, rt: S.rt, theme: store.get('piaf-theme', 'auto'), installable: !!P.installEvt,
       standalone: matchMedia('(display-mode: standalone)').matches || navigator.standalone === true,
       convs: (S.convs || []).map((c) => ({ id: c.conversation_id, name: P.convName(c) || '', group: c.kind === 'group', blocked: !!c.blocked_by_me, pid: c.other_public_id || null,
@@ -119,6 +146,29 @@
       }
       await P.queueMessage(p.id, body);
       return { say: `Pas de connexion pour l’instant : le message pour ${label} est en file d’attente et partira dès que le réseau reviendra. 🕓`, acts: [openConvAct(p.id)] };
+    },
+    async block(p) {
+      const c = convById(p.id); if (!c) throw new Error('Cette discussion n’existe plus.');
+      if (c.kind === 'group' || !c.other_id) throw new Error('On ne peut pas bloquer un groupe.');
+      if (c.blocked_by_me) return { say: `${p.n} est déjà bloqué·e.` };
+      if (!(await confirmDialog('Bloquer ' + p.n + ' ?', 'Cette personne ne pourra plus vous écrire, et vous ne pourrez plus lui écrire tant que le blocage dure. Vous pourrez la débloquer dans Paramètres.', 'Bloquer', true))) return { say: 'D’accord, rien n’a été modifié.', nodone: true };
+      try { await api.rpc('block_user', { p_target: c.other_id }); await P.refreshConvs(); } catch (e) { throw new Error(errText(e)); }
+      return { say: `${p.n} est bloqué·e. Pour annuler : « débloque ${p.n} ».`, acts: [{ l: 'Débloquer ' + p.n, a: 'unblock', p: { id: p.id, n: p.n } }] };
+    },
+    async unblock(p) {
+      const c = convById(p.id); if (!c || !c.other_id) throw new Error('Cette discussion n’existe plus.');
+      try { await api.rpc('unblock_user', { p_target: c.other_id }); await P.refreshConvs(); } catch (e) { throw new Error(errText(e)); }
+      return { say: `${p.n} est débloqué·e : vous pouvez de nouveau vous écrire.`, acts: [openConvAct(p.id)] };
+    },
+    async space() {
+      if (!S.online) throw new Error('Pas de connexion : réessayez quand le réseau revient.');
+      let rows; try { rows = await api.q(sb.from('conversations').select('id,media_bytes')); } catch (e) { throw new Error(errText(e)); }
+      const quota = (S.cfg && S.cfg.conversation_quota_bytes) || 104857600;
+      const list = rows.map((r) => ({ c: convById(r.id), used: Number(r.media_bytes) || 0 })).filter((x) => x.c && x.used > 0).sort((a, b) => b.used - a.used).slice(0, 5);
+      if (!list.length) return { say: 'Aucun média n’occupe d’espace pour l’instant : toutes vos discussions sont à **0 Mo** sur ' + fmt.size(quota) + '. 🎉' };
+      const total = rows.reduce((n, r) => n + (Number(r.media_bytes) || 0), 0);
+      return { say: `Espace de médias (photos, vidéos, audio) — **${fmt.size(total)}** au total. Les discussions qui pèsent le plus :\n` + list.map((x) => `• **${P.convName(x.c)}** : ${fmt.size(x.used)} sur ${fmt.size(quota)} (${Math.min(100, Math.round((x.used / quota) * 100))} %)`).join('\n') + '\nOuvrez les médias d’une discussion pour supprimer des fichiers **pour tout le monde** : seule cette suppression libère de la place.',
+        acts: list.map((x) => ({ l: 'Médias de ' + P.convName(x.c), a: 'gallery', p: { id: x.c.conversation_id } })) };
     },
     async fav(p) { await P.setMember(p.id, { favorite: !!p.v }); return { say: p.v ? `${p.n} est maintenant dans vos favoris. ⭐` : `${p.n} n’est plus dans vos favoris.` }; },
     async arch(p) { await P.setMember(p.id, { archived: !!p.v }); return { say: p.v ? `${p.n} est archivée. Elle reviendra à la réception d’un nouveau message.` : `${p.n} est de retour dans vos discussions.` }; },
@@ -177,19 +227,21 @@
   const sameGroup = (a, b) => a && b && a.role === b.role && fmt.dayKey(a.at) === fmt.dayKey(b.at) && Math.abs(new Date(b.at) - new Date(a.at)) < 300000;
 
   // ---------------------------------------------------------------- relais depuis Talk2Piaf Cowork : réponse locale de Talk2Piaf, visible par la seule personne qui la demande
+  // views-chat.js marque chaque bouton « done » après un appui : pour les actions réutilisables on neutralise ce drapeau.
+  const mkAct = (a) => { const o = { l: a.l, a: a.a, p: a.p || {} }; if (!ONCE.has(a.a)) Object.defineProperty(o, 'done', { get: () => false, set: () => {}, enumerable: false }); return o; };
   P.assistantAsk = (q) => {
     let r; try { r = KB.reply(q, context(), mem); } catch (e) { console.error(e); r = null; }
     if (!r) r = { text: 'Je n’ai pas réussi à traiter ce message. Pouvez-vous le reformuler ?', chips: KB.starters().slice(0, 4), links: [], acts: [] };
     if (r.topic !== undefined) mem.topic = r.unknown ? null : (r.topic || mem.topic);
     mem.offer = (r.acts && r.acts[0]) || null;
-    return { text: r.text, links: r.links || [], acts: (r.acts || []).map((a) => ({ l: a.l, a: a.a, p: a.p || {} })), chips: r.chips || [] };
+    return { text: r.text, links: r.links || [], acts: (r.acts || []).map(mkAct), chips: r.chips || [] };
   };
   P.assistantRun = async (act) => { const fn = ACTIONS[act.a]; return fn ? fn(act.p || {}) : null; };
   P.assistantBubble = (r, o) => {
     const extras = [];
     const links = (r.links || []).map((l) => { const u = safeUrl(l.u); return u ? h('a', { class: 't2p-link', href: u, target: '_blank', rel: 'noopener noreferrer nofollow' }, l.l) : null; }).filter(Boolean);
     if (links.length) extras.push(h('div', { class: 't2p-links' }, links));
-    if (r.acts && r.acts.length) extras.push(h('div', { class: 't2p-acts' }, r.acts.map((a, j) => h('button', { type: 'button', class: 't2p-act' + (a.done ? ' done' : ''), disabled: !!a.done, onclick: (e) => o.onAct(j, e.currentTarget) }, a.l))));
+    if (r.acts && r.acts.length) extras.push(h('div', { class: 't2p-acts' }, r.acts.map((a, j) => h('button', { type: 'button', class: 't2p-act' + (usedUp(a) ? ' done' : ''), disabled: usedUp(a), onclick: (e) => o.onAct(j, e.currentTarget) }, a.l))));
     if (o.showChips && r.chips && r.chips.length) extras.push(h('div', { class: 't2p-chips' }, r.chips.map((c) => h('button', { type: 'button', class: 't2p-chip', onclick: () => o.onChip(c.t) }, c.l))));
     const bubble = h('div', { class: 'bubble first last whisper', tabindex: '0', role: 'button', 'aria-haspopup': 'dialog', 'aria-label': 'Réponse de ' + (o.name || NAME),
       onclick: () => o.onMenu(), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); o.onMenu(); } } },
@@ -203,21 +255,62 @@
     let destroyed = false, busy = false, typing = false, timer = null;
     const list = h('div', { class: 'msg-list', role: 'list', 'aria-live': 'polite', 'aria-relevant': 'additions' });
     const scroller = h('div', { class: 'msgs' }, list);
-    const ta = h('textarea', { rows: '1', placeholder: 'Message', 'aria-label': 'Écrire un message', maxlength: '600', enterkeyhint: 'enter',
-      oninput: () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; },
-      onkeydown: (e) => { if (e.key === 'Enter' && !e.shiftKey && matchMedia('(pointer:fine)').matches) { e.preventDefault(); sendText(); } } });
+    const pop = h('div', { class: 'mention-pop', role: 'listbox', 'aria-label': 'Contacts à mentionner', hidden: true });
+    const ta = h('textarea', { rows: '1', placeholder: 'Message — tapez @ pour mentionner un contact', 'aria-label': 'Écrire un message', maxlength: '600', enterkeyhint: 'enter',
+      oninput: () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; updateMentions(); },
+      onclick: () => updateMentions(),
+      onkeydown: (e) => { if (mentionKey(e)) return; if (e.key === 'Enter' && !e.shiftKey && matchMedia('(pointer:fine)').matches) { e.preventDefault(); sendText(); } } });
     const sendBtn = h('button', { class: 'send', type: 'button', 'aria-label': 'Envoyer', onclick: () => sendText() }, icon('send', 22));
-    const composer = h('div', { class: 'composer' }, h('div', { class: 'composer-row' }, ta, sendBtn));
+    const composer = h('div', { class: 'composer' }, pop, h('div', { class: 'composer-row' }, ta, sendBtn));
     const headTitle = h('button', { class: 'chat-title', type: 'button', onclick: () => profileSheet() });
     const header = h('header', { class: 'topbar chat-top' }, iconBtn('back', 'Retour aux discussions', () => P.back('#/')), headTitle, iconBtn('dots', 'Menu de la discussion', () => menu()));
     const el = h('div', { class: 'screen chat' }, header, h('div', { class: 'msgs-wrap' }, scroller), composer);
+
+
+    // ---- @contact : la liste vient de vos discussions (personnes et groupes) ; le moteur comprend « écris à @Marie : … », « ouvre @Marie »…
+    const nrm = KB.norm;
+    const contacts = () => (S.convs || []).map((c) => ({ name: P.convName(c) || '', id: c.other_id, path: c.avatar_path, group: c.kind === 'group' })).filter((c) => c.name);
+    let mp = { items: [], idx: 0, start: 0 };
+    const closePop = () => { pop.hidden = true; mp.items = []; };
+    function updateMentions() {
+      const caret = ta.selectionStart ?? ta.value.length, m = /(^|\s)@([^\s@]{0,30})$/u.exec(ta.value.slice(0, caret));
+      if (!m) { closePop(); return; }
+      const q = nrm(m[2]);
+      mp = { items: contacts().filter((c) => !q || nrm(c.name).split(' ').some((w) => w.startsWith(q))).slice(0, 6), idx: 0, start: caret - m[2].length - 1 };
+      drawPop();
+    }
+    function drawPop() {
+      if (!mp.items.length) { pop.hidden = true; return; }
+      pop.hidden = false;
+      pop.replaceChildren(...mp.items.map((c, i) => h('button', { type: 'button', role: 'option', class: 'mention-item' + (i === mp.idx ? ' on' : ''), 'aria-selected': String(i === mp.idx), onpointerdown: (e) => { e.preventDefault(); pickMention(c); } },
+        P.avatar(c.name, 30, c.id, c.path, c.group), h('span', { class: 'mention-name' }, c.name), c.group ? h('span', { class: 'muted small' }, 'Groupe') : null)));
+    }
+    function pickMention(c) {
+      const caret = ta.selectionStart ?? ta.value.length, ins = '@' + c.name + ' ';
+      ta.value = ta.value.slice(0, mp.start) + ins + ta.value.slice(caret); const pos = mp.start + ins.length;
+      ta.setSelectionRange(pos, pos); closePop(); ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; ta.focus({ preventScroll: true });
+    }
+    function mentionKey(e) {
+      if (pop.hidden || !mp.items.length) return false;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); mp.idx = (mp.idx + (e.key === 'ArrowDown' ? 1 : mp.items.length - 1)) % mp.items.length; drawPop(); return true; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(mp.items[mp.idx]); return true; }
+      if (e.key === 'Escape') { e.preventDefault(); closePop(); return true; }
+      return false;
+    }
+    function richUser(text) { // « @Nom » d'un contact connu mis en valeur ; le reste : liens simples
+      const names = [...new Set(contacts().map((c) => c.name))].sort((a, b) => b.length - a.length); if (!names.length || !text.includes('@')) return P.linkify(text);
+      const re = new RegExp('(^|[\\s(«"\'])@(' + names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')(?![\\p{L}\\p{N}_])', 'giu'), out = []; let last = 0, m;
+      while ((m = re.exec(text))) { const st0 = m.index + m[1].length; if (st0 > last) out.push(...P.linkify(text.slice(last, st0))); out.push(h('span', { class: 'mention' }, m[2])); last = st0 + 1 + m[2].length; }
+      if (last < text.length) out.push(...P.linkify(text.slice(last)));
+      return out;
+    }
 
     function drawHeader() {
       headTitle.replaceChildren(P.assistantAvatar(38), h('span', { class: 'chat-title-text' }, h('strong', null, nameOf()), h('span', { class: 'muted small' }, 'Assistant de Piaf')));
     }
     function buildMsg(m, idx, first, last, isLastMsg) {
       const mine = m.role === 'user';
-      const parts = [h('div', { class: 'text' }, mine ? P.linkify(m.text) : inline(m.text)),
+      const parts = [h('div', { class: 'text' }, mine ? richUser(m.text) : inline(m.text)),
         h('div', { class: 'meta' }, h('time', { datetime: m.at }, fmt.time(m.at)), mine ? h('span', { class: 'st read', title: 'Lu' }, icon('check2', 16)) : null)];
       const bubble = h('div', { class: 'bubble' + (mine ? ' mine' : '') + (first ? ' first' : '') + (last ? ' last' : ''), tabindex: '0', role: 'button', 'aria-haspopup': 'dialog', 'aria-label': 'Actions du message',
         onclick: () => msgSheet(idx), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); msgSheet(idx); } } }, parts);
@@ -226,7 +319,7 @@
         const extras = [];
         const links = (m.links || []).map((l) => { const u = safeUrl(l.u); return u ? h('a', { class: 't2p-link', href: u, target: '_blank', rel: 'noopener noreferrer nofollow' }, l.l) : null; }).filter(Boolean);
         if (links.length) extras.push(h('div', { class: 't2p-links' }, links));
-        if (m.acts && m.acts.length) extras.push(h('div', { class: 't2p-acts' }, m.acts.map((a, j) => h('button', { type: 'button', class: 't2p-act' + (a.done ? ' done' : ''), disabled: !!a.done, onclick: (e) => runAct(idx, j, e.currentTarget) }, a.l))));
+        if (m.acts && m.acts.length) extras.push(h('div', { class: 't2p-acts' }, m.acts.map((a, j) => h('button', { type: 'button', class: 't2p-act' + (usedUp(a) ? ' done' : ''), disabled: usedUp(a), onclick: (e) => runAct(idx, j, e.currentTarget) }, a.l))));
         if (isLastMsg && !typing && m.chips && m.chips.length) extras.push(h('div', { class: 't2p-chips' }, m.chips.map((c) => h('button', { type: 'button', class: 't2p-chip', onclick: () => sendText(c.t) }, c.l))));
         if (extras.length) kids.push(h('div', { class: 't2p-extras' }, extras));
       }
@@ -270,14 +363,15 @@
       changed(); render();
     }
     async function runAct(idx, j, btn) {
-      const act = s.msgs[idx] && s.msgs[idx].acts[j]; if (!act || act.done) return;
+      const act = s.msgs[idx] && s.msgs[idx].acts[j]; if (!act || usedUp(act)) return;
       const fn = ACTIONS[act.a]; if (!fn) return;
       btn.disabled = true;
       try {
         const r = await fn(act.p || {});
         if (destroyed) return;
         if (r && r.clear) { s.msgs = []; mem.topic = null; mem.offer = null; changed(); render(); toast('Historique effacé'); return; }
-        if (!(r && r.nodone)) act.done = true; else btn.disabled = false;
+        if (ONCE.has(act.a) && !(r && r.nodone)) act.done = true;
+        btn.disabled = usedUp(act);
         if (r && r.say) { push({ role: 'assistant', text: r.say, acts: (r.acts || []).map((a) => ({ l: a.l, a: a.a, p: a.p || {} })), eph: !!r.eph }); } else { changed(); render(); }
       } catch (e) {
         if (destroyed) return;

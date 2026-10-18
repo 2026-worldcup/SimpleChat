@@ -96,12 +96,12 @@ T('poll_close_howto', 'Comment clôturer ou supprimer un sondage ?', ['cloturer 
 T('poll_results_howto', 'Comment voir les résultats d’un sondage ?', ['resultat sondage', 'resultats', 'voir les votes', 'combien de votes', 'qui a vote', 'score sondage', 'ou en est le sondage'],
   'Demandez « **résultat du sondage** » : je résume les votes quand je les connais et je vous propose d’ouvrir le sondage. Dans un sondage public, vous voyez aussi qui a voté quoi ; dans un sondage anonyme, seulement les totaux.',
   { next: ['poll_close_howto', 'poll_anonymous'] });
-T('poll_edit', 'Comment modifier un sondage ?', ['modifier sondage', 'changer sondage', 'corriger sondage', 'editer sondage', 'ajouter une option', 'ajouter option', 'retirer une option', 'faute dans le sondage'],
+T('poll_edit_cw', 'Comment modifier un sondage ?', ['modifier sondage', 'changer sondage', 'corriger sondage', 'editer sondage', 'ajouter une option', 'ajouter option', 'retirer une option', 'faute dans le sondage'],
   'Appuyez sur le sondage puis sur « Modifier le sondage » (réservé à son auteur et aux administrateurs) : question, options, choix multiples, durée. L’anonymat ne peut plus changer une fois des votes enregistrés. Si le sondage est **ouvert aux options**, chaque membre peut aussi y ajouter la sienne avec « + Option ».',
   { next: ['poll_options', 'poll_close_howto'] });
 T('poll_who', 'Qui peut créer un sondage ?', ['qui peut creer un sondage', 'droit sondage', 'permission sondage', 'autorise sondage', 'membre peut creer', 'reserve aux admins'],
   (ctx) => (ctx.perms && ctx.perms.poll === 'admin' ? 'Dans cette discussion, seuls les **administrateurs** peuvent créer un sondage. Tous les membres peuvent en revanche y répondre.' : 'Tous les membres de la discussion peuvent créer un sondage et y répondre. Seul son auteur (ou un administrateur du groupe) peut le modifier, le clôturer ou le supprimer.'),
-  { next: ['poll_howto', 'poll_edit', 'grp_roles'] });
+  { next: ['poll_howto', 'poll_edit_cw', 'grp_roles'] });
 T('poll_ideas', 'Idées de sondages', ['idee de sondage', 'idees de sondages', 'exemples de sondage', 'sondage exemple', 'quel sondage', 'inspiration sondage', 'que demander au groupe'],
   'Quelques idées à lancer en un message :\n• choisir une **date** (samedi ou dimanche ?)\n• choisir un **lieu** ou un **restaurant**\n• savoir **qui vient** (oui / non / peut-être)\n• décider d’un **cadeau** commun ou d’un **nom de groupe**\nChoisissez un exemple ci-dessous : je prépare l’aperçu.',
   { chipsFn: () => [{ l: 'Qui vient samedi ?', t: 'Crée un sondage : Qui vient samedi ?' }, { l: 'Samedi ou dimanche ?', t: 'Crée un sondage : Quel jour ? samedi, dimanche' },
