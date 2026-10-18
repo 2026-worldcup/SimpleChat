@@ -209,13 +209,19 @@ const players = new Map(); let current = null;
 ext.audioBlock = (d) => {
   let pl = players.get(d.id); if (!pl) { pl = { a: new Audio(), url: null, rate: 1 }; pl.a.preload = 'none'; players.set(d.id, pl); }
   const a = pl.a, total = () => (d.duration_ms ? d.duration_ms / 1000 : isFinite(a.duration) ? a.duration : 0);
-  const btn = h('button', { type: 'button', class: 'au-play', 'aria-label': 'Lire' }), bar = h('input', { type: 'range', min: '0', max: '1000', value: '0', class: 'au-bar', 'aria-label': 'Position de lecture' });
-  const time = h('span', { class: 'au-time muted small' }), speed = h('button', { type: 'button', class: 'au-speed', 'aria-label': 'Vitesse de lecture' });
+  const btn = h('button', { type: 'button', class: 'au-play', 'aria-label': 'Lire' });
+  // forme d'onde : barres déterministes (graine = id du média), cliquables / glissables pour se déplacer dans l'audio
+  let seed = 0; for (const ch of String(d.id || d.path || 'x')) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const NB = 34, bars = Array.from({ length: NB }, (_, i) => { const env = 0.55 + 0.45 * Math.sin((i / NB) * Math.PI), v = 0.22 + 0.78 * rnd() * env; return h('i', { style: { height: Math.round(v * 100) + '%' } }); });
+  const bar = h('div', { class: 'au-wave', role: 'slider', tabindex: '0', 'aria-label': 'Position de lecture', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0' }, bars);
+  const time = h('span', { class: 'au-time' }), speed = h('button', { type: 'button', class: 'au-speed', 'aria-label': 'Vitesse de lecture' });
   const isVoice = /^vocal-/.test(d.name || '');
   function paint() {
-    btn.replaceChildren(icon(a.paused ? 'play' : 'pause', 20)); btn.setAttribute('aria-label', a.paused ? 'Lire' : 'Pause');
-    const t = a.currentTime || 0, T = total(); bar.value = T ? String(Math.min(1000, Math.round((t / T) * 1000))) : '0';
-    time.textContent = (t > 0 || !a.paused ? fmtT(t) + (T ? ' / ' + fmtT(T) : '') : T ? fmtT(T) : '0:00'); speed.textContent = pl.rate + '×';
+    btn.replaceChildren(icon(a.paused ? 'play' : 'pause', 22)); btn.setAttribute('aria-label', a.paused ? 'Lire' : 'Pause'); btn.classList.toggle('on', !a.paused);
+    const t = a.currentTime || 0, T = total(), p = T ? Math.min(1, t / T) : 0, k = Math.round(p * NB);
+    bars.forEach((b, i) => b.classList.toggle('done', i < k)); bar.setAttribute('aria-valuenow', String(Math.round(p * 100)));
+    time.textContent = t > 0 || !a.paused ? fmtT(t) : T ? fmtT(T) : '0:00'; speed.textContent = pl.rate + '×'; speed.hidden = a.paused && t === 0;
   }
   a.onplay = a.onpause = a.ontimeupdate = a.onloadedmetadata = paint; a.onended = () => { a.currentTime = 0; paint(); }; a.onerror = () => { pl.url = null; };
   btn.addEventListener('click', async (e) => {
@@ -227,10 +233,14 @@ ext.audioBlock = (d) => {
       a.playbackRate = pl.rate; await a.play(); current = a;
     } catch { pl.url = null; toast('Lecture impossible. Réessayez.', { error: true }); }
   });
-  bar.addEventListener('click', (e) => e.stopPropagation()); bar.addEventListener('input', (e) => { e.stopPropagation(); const T = total(); if (pl.url && T) a.currentTime = (bar.value / 1000) * T; });
+  const seek = (e) => { const T = total(), r = bar.getBoundingClientRect(); if (pl.url && T && r.width) { a.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * T; paint(); } };
+  let drag = false;
+  bar.addEventListener('click', (e) => e.stopPropagation()); bar.addEventListener('pointerdown', (e) => { e.stopPropagation(); drag = true; try { bar.setPointerCapture(e.pointerId); } catch { /* */ } seek(e); });
+  bar.addEventListener('pointermove', (e) => { if (drag) seek(e); }); bar.addEventListener('pointerup', () => { drag = false; }); bar.addEventListener('pointercancel', () => { drag = false; });
+  bar.addEventListener('keydown', (e) => { const T = total(); if (!pl.url || !T || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return; e.preventDefault(); e.stopPropagation(); a.currentTime = Math.max(0, Math.min(T, a.currentTime + (e.key === 'ArrowRight' ? 5 : -5))); });
   speed.addEventListener('click', (e) => { e.stopPropagation(); pl.rate = pl.rate === 1 ? 1.5 : pl.rate === 1.5 ? 2 : 1; a.playbackRate = pl.rate; paint(); });
   paint();
-  return h('div', { class: 'audio', onclick: (e) => e.stopPropagation() }, btn, h('div', { class: 'au-main' }, bar, h('div', { class: 'au-meta' }, h('span', { class: 'au-name small' }, icon('mic', 12), isVoice ? 'Message vocal' : d.name), time, speed)));
+  return h('div', { class: 'audio' + (isVoice ? ' voice' : ''), onclick: (e) => e.stopPropagation() }, btn, h('div', { class: 'au-main' }, bar, h('div', { class: 'au-meta' }, h('span', { class: 'au-name' }, isVoice ? icon('mic', 12) : icon('music', 12), isVoice ? 'Message vocal' : d.name), time, speed)));
 };
 
 // ------------------------------------------------------------------ audio : enregistrement
@@ -238,11 +248,24 @@ ext.canRecord = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUse
 ext.recorderBar = ({ onDone, maxMs = 600000 }) => {
   let stream = null, mr = null, chunks = [], t0 = 0, timer = null, done = false, wantSend = false;
   const time = h('span', { class: 'rec-time' }, '0:00');
-  const el = h('div', { class: 'recbar', role: 'group', 'aria-label': 'Enregistrement vocal' }, iconBtn('trash', 'Annuler l’enregistrement', () => finish(false)), h('span', { class: 'rec-dot', 'aria-hidden': 'true' }), time,
-    h('span', { class: 'rec-hint muted small' }, 'Enregistrement…'), h('button', { class: 'send', type: 'button', 'aria-label': 'Envoyer le message vocal', onclick: () => finish(true) }, icon('send', 22)));
+  const live = h('div', { class: 'rec-live', 'aria-hidden': 'true' }, Array.from({ length: 28 }, () => h('i')));
+  const el = h('div', { class: 'recbar', role: 'group', 'aria-label': 'Enregistrement vocal' }, iconBtn('trash', 'Annuler l’enregistrement', () => finish(false)), h('div', { class: 'rec-pill' }, h('span', { class: 'rec-dot', 'aria-hidden': 'true' }), time, live),
+    h('button', { class: 'send', type: 'button', 'aria-label': 'Envoyer le message vocal', onclick: () => finish(true) }, icon('send', 22)));
+  let ac = null, raf = 0;
+  function meter() { // niveau sonore en direct : les barres défilent vers la gauche
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+      ac = new AC(); const an = ac.createAnalyser(); an.fftSize = 256; ac.createMediaStreamSource(stream).connect(an);
+      const buf = new Uint8Array(an.fftSize), bs = [...live.children], lv = bs.map(() => 0.08); let last = 0;
+      const tick = (ts) => { raf = requestAnimationFrame(tick); if (ts - last < 70) return; last = ts; an.getByteTimeDomainData(buf);
+        let s = 0; for (let i = 0; i < buf.length; i++) { const x = (buf[i] - 128) / 128; s += x * x; } lv.push(Math.min(1, Math.max(0.08, Math.sqrt(s / buf.length) * 3.2))); lv.shift();
+        bs.forEach((b, i) => { b.style.height = Math.round(lv[i] * 100) + '%'; }); };
+      raf = requestAnimationFrame(tick);
+    } catch { /* l'enregistrement fonctionne sans visualisation */ }
+  }
   async function start() {
     if (!ext.canRecord()) throw new Error('unsupported');
-    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); meter();
     const mt = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].find((t) => window.MediaRecorder.isTypeSupported(t));
     mr = new MediaRecorder(stream, Object.assign({ audioBitsPerSecond: 32000 }, mt ? { mimeType: mt } : {}));
     mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
@@ -251,7 +274,7 @@ ext.recorderBar = ({ onDone, maxMs = 600000 }) => {
   }
   function finish(send) { if (done) return; wantSend = send; if (mr && mr.state !== 'inactive') mr.stop(); else finalize(); }
   function finalize() {
-    if (done) return; done = true; clearInterval(timer); if (stream) stream.getTracks().forEach((t) => t.stop());
+    if (done) return; done = true; clearInterval(timer); cancelAnimationFrame(raf); if (ac) { try { ac.close(); } catch { /* */ } } if (stream) stream.getTracks().forEach((t) => t.stop());
     const ms = Date.now() - t0;
     if (!wantSend || !chunks.length) return onDone(null);
     if (ms < 600) { toast('Message vocal trop court', { error: true }); return onDone(null); }
