@@ -216,6 +216,7 @@ Piaf.views.settings = () => {
             try { await saveSetting({ notifications: true }); } catch (e) { toast(errText(e), { error: true }); return false; } return true;
           }, 'Notifications')),
         h('p', { class: 'muted small' }, 'Sur iPhone, les notifications exigent d’installer l’application sur l’écran d’accueil (iOS 16.4 ou plus). Silence par conversation : menu de chaque discussion.')),
+      Piaf.assistantSettings ? Piaf.assistantSettings() : null,
       section('Apparence', h('div', { class: 'segmented', role: 'radiogroup', 'aria-label': 'Thème' }, [['auto', 'Automatique'], ['light', 'Clair'], ['dark', 'Sombre']].map(([k, l]) =>
         h('button', { type: 'button', role: 'radio', 'aria-checked': String(theme === k), class: theme === k ? 'on' : '', onclick: () => { store.set('piaf-theme', k); Piaf.applyTheme(); draw(); } }, l)))),
       section('Contacts bloqués', blocked.length ? blocked.map((b) => h('div', { class: 'row' }, h('div', { class: 'row-text' }, h('strong', null, b.display_name), h('span', { class: 'muted small' }, 'Identifiant ' + fmt.id8(b.public_id))),
