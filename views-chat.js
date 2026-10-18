@@ -280,9 +280,9 @@ Piaf.views.chat = (route) => {
     const rs = reactions.get(m.id) || [], groups = {}; rs.forEach((r) => { (groups[r.emoji] ||= []).push(r.user_id); });
     const chips = Object.keys(groups).length ? h('div', { class: 'reacts' }, Object.entries(groups).map(([e, u]) => h('button', { type: 'button', class: 'chip' + (u.includes(me()) ? ' mine' : ''), 'aria-label': `Réaction ${e}, ${u.length}`, onclick: () => react(m, e) }, e, u.length > 1 ? ' ' + u.length : ''))) : null;
     const cls = 'msg' + (mine ? ' mine' : '') + (first ? ' gap' : '') + (selMode && sel.has(m.id) ? ' sel' : '');
-    // groupes : photo de profil de l'expéditeur, affichée en bas de chaque série de messages (un espace est réservé pour les autres)
+    // groupes : photo de profil de l'expéditeur, affichée au début de chaque série de messages (un espace est réservé pour les autres)
     if (isGroup() && !mine) {
-      const who = h('span', { class: 'msg-av' + (last ? '' : ' nav'), 'aria-hidden': 'true' }, last ? avatar(senderName(m.sender_id), 32, m.sender_id) : null);
+      const who = h('span', { class: 'msg-av' + (first ? '' : ' nav'), 'aria-hidden': 'true' }, first ? avatar(senderName(m.sender_id), 26, m.sender_id) : null);
       return h('div', { class: cls + ' grp', role: 'listitem', 'data-id': m.id }, who, h('div', { class: 'msg-col' }, bubble, chips));
     }
     return h('div', { class: cls, role: 'listitem', 'data-id': m.id }, bubble, chips);
