@@ -279,7 +279,13 @@ Piaf.views.chat = (route) => {
     pressable(bubble, m);
     const rs = reactions.get(m.id) || [], groups = {}; rs.forEach((r) => { (groups[r.emoji] ||= []).push(r.user_id); });
     const chips = Object.keys(groups).length ? h('div', { class: 'reacts' }, Object.entries(groups).map(([e, u]) => h('button', { type: 'button', class: 'chip' + (u.includes(me()) ? ' mine' : ''), 'aria-label': `Réaction ${e}, ${u.length}`, onclick: () => react(m, e) }, e, u.length > 1 ? ' ' + u.length : ''))) : null;
-    return h('div', { class: 'msg' + (mine ? ' mine' : '') + (first ? ' gap' : '') + (selMode && sel.has(m.id) ? ' sel' : ''), role: 'listitem', 'data-id': m.id }, bubble, chips);
+    const cls = 'msg' + (mine ? ' mine' : '') + (first ? ' gap' : '') + (selMode && sel.has(m.id) ? ' sel' : '');
+    // groupes : photo de profil de l'expéditeur, affichée en bas de chaque série de messages (un espace est réservé pour les autres)
+    if (isGroup() && !mine) {
+      const who = h('span', { class: 'msg-av' + (last ? '' : ' empty'), 'aria-hidden': 'true' }, last ? avatar(senderName(m.sender_id), 32, m.sender_id) : null);
+      return h('div', { class: cls + ' grp', role: 'listitem', 'data-id': m.id }, who, h('div', { class: 'msg-col' }, bubble, chips));
+    }
+    return h('div', { class: cls, role: 'listitem', 'data-id': m.id }, bubble, chips);
   }
   // message public de Talk2Piaf Cowork (réponse à un @Talk2Piaf Cowork, sauvegardée dans le cloud, visible par tous les membres)
   function buildAssistantMsg(m) {

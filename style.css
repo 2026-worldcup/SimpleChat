@@ -204,15 +204,29 @@ input[type=datetime-local] { width: 100%; min-height: var(--tap); padding: 8px 1
 .todo-text { flex: 1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-height: 36px; padding: 6px 2px; border: 0; background: none; text-align: left; } .todo-text:disabled { opacity: 1; cursor: default; }
 .todo-item.done .todo-text > span:first-child { text-decoration: line-through; color: var(--muted); }
 .todo-who { font-size: .76rem; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 8px; padding: 0 6px; } .todo-by { font-size: .74rem; }
-.audio { display: flex; align-items: center; gap: 10px; width: min(66vw, 260px); max-width: 100%; }
-.au-play { flex: none; width: 42px; height: 42px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; padding: 0; }
-.au-main { flex: 1; min-width: 0; display: grid; gap: 2px; } .au-bar { width: 100%; accent-color: var(--accent); margin: 0; }
-.au-meta { display: flex; align-items: center; gap: 8px; } .au-name { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.au-speed { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 0 8px; min-height: 26px; font-size: .75rem; font-weight: 700; }
-.recbar { display: flex; align-items: center; gap: 10px; padding: 6px 8px; } .rec-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--danger); animation: recblink 1s infinite; }
+/* messages vocaux : lecteur à forme d'onde */
+.audio { display: flex; align-items: center; gap: 12px; width: min(72vw, 290px); max-width: 100%; padding: 2px 0; }
+.au-play { flex: none; width: 46px; height: 46px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; padding: 0; box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 40%, transparent); transition: transform .12s, box-shadow .12s; }
+.au-play:active { transform: scale(.92); } .au-play.on { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 22%, transparent); }
+.au-main { flex: 1; min-width: 0; display: grid; gap: 5px; }
+.au-wave { display: flex; align-items: center; gap: 2px; height: 34px; cursor: pointer; touch-action: none; border-radius: 6px; }
+.au-wave i { flex: 1; min-width: 2px; border-radius: 3px; background: color-mix(in srgb, var(--accent) 32%, transparent); transition: background .15s; }
+.au-wave i.done { background: var(--accent); } .au-wave:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.au-meta { display: flex; align-items: center; gap: 8px; font-size: .76rem; color: var(--muted); }
+.au-name { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.au-time { font-variant-numeric: tabular-nums; font-weight: 600; }
+.au-speed { border: 0; background: var(--accent-soft); color: var(--accent); border-radius: 10px; padding: 0 9px; min-height: 22px; font-size: .72rem; font-weight: 800; }
+.recbar { display: flex; align-items: center; gap: 8px; padding: 6px 8px; }
+.rec-pill { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0 14px; height: 44px; border-radius: 22px; background: var(--surface2); }
+.rec-live { flex: 1; display: flex; align-items: center; gap: 2px; height: 28px; min-width: 0; } .rec-live i { flex: 1; min-width: 2px; height: 8%; border-radius: 3px; background: var(--accent); transition: height .07s; }
+/* groupes : photo de profil à côté des messages reçus */
+.msg.grp { flex-direction: row; align-items: flex-end; gap: 6px; }
+.msg-av { flex: none; width: 32px; height: 32px; display: inline-grid; } .msg-av.empty { visibility: hidden; }
+.msg-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
+.rec-dot { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--danger); animation: recblink 1s infinite; }
 @keyframes recblink { 50% { opacity: .25; } } .rec-time { font-variant-numeric: tabular-nums; font-weight: 700; } .rec-hint { flex: 1; }
 .tile.audio-tile { display: grid; place-items: center; gap: 4px; padding: 6px; background: var(--surface2); } .tile.audio-tile .tile-name { font-size: .7rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-@media (prefers-reduced-motion: reduce) { .rec-dot { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .rec-dot { animation: none; } .rec-live i, .au-play { transition: none; } }
 
 .poll-foot .link-btn { white-space: nowrap; padding: 8px 4px; font-size: .9rem; }
 
