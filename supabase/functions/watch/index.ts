@@ -1,7 +1,8 @@
 // Piaf — Edge Function `watch` : vérifie les fichiers suivis (dépôts GitHub publics) et prévient la personne ou la discussion.
 // Appelée toutes les 15 minutes par pg_cron (voir 010_watchers.sql et docs/CONNECTEURS.md), JAMAIS par l'application.
-// Déploiement : supabase functions deploy watch --no-verify-jwt   (l'appel est protégé par le secret WATCH_SECRET, pas par un jeton de personne)
-// Secrets : WATCH_SECRET (32 caractères ou plus, obligatoire) ; GITHUB_TOKEN (facultatif : jeton en lecture seule des dépôts publics, relève la limite de 60 à 5 000 requêtes par heure).
+// Déploiement : supabase functions deploy watch --no-verify-jwt   (l'appel est protégé par un secret du coffre Vault, pas par un jeton de personne)
+// Secret d'appel : généré par la migration 011 et gardé dans le coffre (Vault), lu par watch_secret() ; aucune variable à définir.
+// Secret facultatif : GITHUB_TOKEN (facultatif : jeton en lecture seule des dépôts publics, relève la limite de 60 à 5 000 requêtes par heure).
 import { createClient } from "npm:@supabase/supabase-js@2.117.2";
 import { checkGithub, timingSafeEqual, type GhRef } from "./lib.ts";
 
@@ -12,9 +13,11 @@ type Due = { id: string; provider: string; ref: GhRef; last_sha: string | null; 
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
-  const secret = Deno.env.get("WATCH_SECRET") ?? "";
-  if (secret.length < 32) return json({ error: "server_misconfigured" }, 500);
-  if (!timingSafeEqual(req.headers.get("x-watch-secret") ?? "", secret)) return json({ error: "forbidden" }, 403);
+  const given = req.headers.get("x-watch-secret") ?? "";
+  if (given.length < 32) return json({ error: "forbidden" }, 403);
+  const { data: secret, error: se } = await admin.rpc("watch_secret");
+  if (se || typeof secret !== "string" || secret.length < 32) return json({ error: "server_misconfigured" }, 500);
+  if (!timingSafeEqual(given, secret)) return json({ error: "forbidden" }, 403);
 
   const { data, error } = await admin.rpc("watch_due", { p_limit: 25 });
   if (error) return json({ error: "watch_due_failed" }, 500);

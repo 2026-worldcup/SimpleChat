@@ -59,7 +59,8 @@ supabase/migrations/005_find_user_exact.sql  recherche par identifiant exact
 supabase/migrations/006_avatars.sql      photos de profil
 supabase/migrations/007_groups.sql       groupes (contrainte appliquée sous le nom conversations_shape_check)
 supabase/migrations/009_collab.sql        historique des groupes masqué au niveau des tables, sondages, listes de tâches, audio, réponse publique de l'assistant, mentions non lues
-supabase/migrations/010_watchers.sql   suivi de fichiers GitHub : tables, fonctions, alertes (à compléter par l'Edge Function `watch` et une tâche planifiée, voir docs/CONNECTEURS.md)
+supabase/migrations/010_watchers.sql   suivi de fichiers GitHub : tables, fonctions, alertes (avec l'Edge Function `watch`)
+supabase/migrations/011_watch_cron.sql   secret d'appel généré dans le coffre Vault et tâche planifiée toutes les 15 minutes
 PLAN_GROUPES.md      plan de la gestion des groupes
 supabase/functions/auth/                inscription, connexion, suppression de compte
 supabase/functions/media/               finalisation d'envoi, suppression réelle, nettoyage

@@ -188,7 +188,7 @@ revoke all on function public._post_as(uuid, uuid, text), public.watch_due(integ
 grant execute on function public._post_as(uuid, uuid, text), public.watch_due(integer), public.watch_report(uuid, text, text, text, text, text) to service_role;
 
 -- ---------------------------------------------------------------- 5. planification (à exécuter UNE fois, après avoir déployé l'Edge Function `watch` ; voir docs/CONNECTEURS.md)
--- Prérequis : extensions pg_cron et pg_net activées (Database → Extensions), secret WATCH_SECRET défini sur la fonction.
+-- Remplacée par la migration 011_watch_cron.sql (secret généré dans le coffre, aucune saisie manuelle). Les lignes ci-dessous ne servent plus.
 --   select vault.create_secret('https://<REF>.supabase.co/functions/v1/watch', 'piaf_watch_url');
 --   select vault.create_secret('<la même valeur que WATCH_SECRET>', 'piaf_watch_secret');
 --   select cron.schedule('piaf-watch', '*/15 * * * *', $$

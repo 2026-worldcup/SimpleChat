@@ -44,29 +44,18 @@ Limites : 10 suivis par personne, 5 par discussion ; dépôts publics seulement 
 ### Word, Excel, Google Docs : ce que répondent les assistants
 Ils expliquent honnêtement que ce n'est pas encore disponible, pourquoi, et rappellent deux solutions : les notifications propres à Google / OneDrive-SharePoint, et le suivi GitHub (un fichier Word ou Excel stocké dans un dépôt GitHub public peut déjà être suivi).
 
-## 3. Mise en route du suivi GitHub (à faire une fois)
+## 3. Mise en route du suivi GitHub
 
-Le calendrier fonctionne dès la publication du code. Pour le suivi de fichiers, il faut activer la partie serveur. Tant que ce n'est pas fait, le bouton « Suivre » répond « Cette fonction n'est pas encore activée sur le serveur » : rien ne casse.
+**État sur le projet SimpleChat (khnttjcatqafnrbarzdg) : en service depuis le 2026-10-19.** Migrations 010 et 011 appliquées, extensions `pg_cron` et `pg_net` activées, fonction `watch` déployée (sans vérification de jeton de personne), tâche `piaf-watch` toutes les 15 minutes. Contrôle fait : la fonction répond 200 avec le bon secret et 403 avec un mauvais.
 
-1. **Migration** : exécutez `supabase/migrations/010_watchers.sql` dans l'éditeur SQL du projet Supabase de Piaf (après la 009).
-2. **Extensions** : dans Supabase → Database → Extensions, activez `pg_cron` et `pg_net`.
-3. **Secret de la fonction** : générez une valeur de 32 caractères ou plus (`openssl rand -base64 48`), puis :
-   `supabase secrets set WATCH_SECRET=<valeur> --project-ref <REF>`
-   Facultatif mais recommandé : `supabase secrets set GITHUB_TOKEN=<jeton> --project-ref <REF>` avec un jeton GitHub « fine-grained » en lecture seule des dépôts publics (sans aucune autre permission). Sans lui, GitHub limite les requêtes à 60 par heure pour tout le serveur ; avec lui, 5 000.
-4. **Déploiement** : `supabase functions deploy watch --no-verify-jwt --project-ref <REF>` (l'appel est protégé par `WATCH_SECRET`, pas par un jeton de personne).
-5. **Planification** : exécutez dans l'éditeur SQL (en remplaçant `<REF>` et la valeur du secret, identique à `WATCH_SECRET`) :
-   ```sql
-   select vault.create_secret('https://<REF>.supabase.co/functions/v1/watch', 'piaf_watch_url');
-   select vault.create_secret('<la même valeur que WATCH_SECRET>', 'piaf_watch_secret');
-   select cron.schedule('piaf-watch', '*/15 * * * *', $$
-     select net.http_post(
-       url := (select decrypted_secret from vault.decrypted_secrets where name = 'piaf_watch_url'),
-       headers := jsonb_build_object('Content-Type', 'application/json', 'x-watch-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'piaf_watch_secret')),
-       body := '{}'::jsonb, timeout_milliseconds := 55000) $$);
-   ```
-6. **Vérification** : `curl -X POST -H "x-watch-secret: <valeur>" https://<REF>.supabase.co/functions/v1/watch` doit répondre `{"due":0,"changed":0,...}`. Puis, dans Talk2Piaf : « suis https://github.com/<un dépôt public à vous> ». Faites une modification sur ce dépôt : l'alerte arrive en 15 minutes au plus.
+Pour un autre projet Supabase :
+1. Activez `pg_cron` et `pg_net` (Database → Extensions).
+2. Exécutez `010_watchers.sql`, puis déployez la fonction : `supabase functions deploy watch --no-verify-jwt --project-ref <REF>`.
+3. Exécutez `011_watch_cron.sql` (après avoir remplacé l'adresse du projet dans le fichier) : il génère au hasard le secret d'appel, le garde dans le coffre Vault (la fonction le relit par `watch_secret()`, réservée au rôle `service_role`) et programme la tâche. Personne n'a de secret à recopier.
+4. Facultatif mais recommandé : `supabase secrets set GITHUB_TOKEN=<jeton> --project-ref <REF>` avec un jeton GitHub « fine-grained » en lecture seule des dépôts publics (aucune autre permission). Sans lui, GitHub limite à 60 requêtes par heure pour tout le serveur ; avec lui, 5 000.
+5. Vérification : dans Talk2Piaf, « suis https://github.com/<un dépôt public> », puis modifiez ce dépôt : l'alerte arrive en 15 minutes au plus. Pour surveiller le serveur : `select * from cron.job_run_details order by start_time desc limit 5;`.
 
-Ne jamais mettre `WATCH_SECRET`, `GITHUB_TOKEN` ni la clé `service_role` dans le dépôt ou dans `config.js`.
+Ne jamais mettre `GITHUB_TOKEN` ni la clé `service_role` dans le dépôt ou dans `config.js`.
 
 ## 4. Limites connues
 - Pas de notification quand l'application est fermée (voir le README : il faudrait Web Push) ; les alertes personnelles attendent l'ouverture de l'application, les messages de groupe arrivent comme n'importe quel message.
