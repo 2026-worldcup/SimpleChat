@@ -142,6 +142,8 @@ const ERR = {
   signup_rate_limited: 'Trop de créations de comptes pour le moment. Réessayez plus tard.', signup_failed: 'Création du compte impossible. Réessayez.',
   server_misconfigured: 'Le service n’est pas encore configuré (voir README).', network: 'Pas de connexion. Réessayez quand le réseau revient.',
   poll_closed: 'Ce sondage est clos.', poll_has_votes: 'Impossible : des votes existent déjà sur ce sondage.', too_many_options: 'Un sondage accepte 12 options au maximum.', too_many_items: 'Une liste accepte 100 éléments au maximum (50 à sa création).',
+  too_many_watches: 'Limite de suivis atteinte (10 par personne, 5 par discussion). Arrêtez-en un d’abord.',
+  not_enabled: 'Cette fonction n’est pas encore activée sur le serveur.',
   quota_exceeded: 'Le quota de médias de cette discussion est atteint.',
   storage_cleanup_failed: 'Suppression des fichiers impossible pour l’instant ; le compte n’a pas été supprimé. Réessayez.',
 };
@@ -149,6 +151,7 @@ class PiafError extends Error { constructor(code, extra) { super(code); this.cod
 function toCode(e) {
   if (e instanceof PiafError) return e.code;
   const msg = String(e?.message || e || '');
+  if (/could not find the function|PGRST202/i.test(msg)) return 'not_enabled';
   for (const k of Object.keys(ERR)) if (msg === k || msg.includes(k)) return k;
   if (!navigator.onLine || /fetch|network|load failed|timeout/i.test(msg)) return 'network';
   return 'unknown';

@@ -86,6 +86,10 @@
     async jump(p, env) { if (p.mid) env.jump(p.mid); else P.toast('Ce message n’est pas disponible.', { error: true }); return { nodone: true, quiet: true }; },
     search(p, env) { env.search({ q: p.q || '', kind: p.kind || 'text', from: p.from || null, since: p.since || null, until: p.until || null }); return { nodone: true, quiet: true }; },
     pins(p, env) { env.pins(); return { nodone: true, quiet: true }; },
+    // agenda (fichier .ics ou lien : chez la personne qui appuie) et suivi de fichiers de la discussion (messages publiés par le serveur, migration 010)
+    cal_ics: (p) => need(P.calOpen, 'Cette action n’est pas disponible.')('ics', p), cal_google: (p) => need(P.calOpen, 'Cette action n’est pas disponible.')('google', p), cal_outlook: (p) => need(P.calOpen, 'Cette action n’est pas disponible.')('outlook', p),
+    watch_add: (p, env) => need(P.watchOps, 'Cette action n’est pas disponible.').add(p, env.convId), watch_list: (p, env) => need(P.watchOps, 'Cette action n’est pas disponible.').list(env.convId, !!env.isAdmin),
+    watch_stop: (p) => need(P.watchOps, 'Cette action n’est pas disponible.').stop(p),
     // relais vers Talk2Piaf (local) : sa réponse arrive en privé, avec ses propres boutons
     t2p(p) { return { t2p: P.assistantAsk ? P.assistantAsk(p.q) : null, quiet: true }; },
   };

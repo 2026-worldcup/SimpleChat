@@ -12,7 +12,7 @@
 
   const AID = 'talk2piaf', NAME = 'Talk2Piaf', MAX_MSGS = 80;
   // Actions qui ne doivent partir qu'une fois (un message envoyé, un blocage…) ; tous les autres boutons restent réutilisables.
-  const ONCE = new Set(['send', 'block', 'unblock', 'revoke', 'forget']);
+  const ONCE = new Set(['send', 'block', 'unblock', 'revoke', 'forget', 'watch_stop']);
   const usedUp = (a) => !!(a && a.done && ONCE.has(a.a));
   // Moteur de recherche choisi dans Paramètres (réglage de l'appareil, jamais envoyé au serveur)
   const SKEY = 'piaf-t2p-search';
@@ -108,6 +108,72 @@
         unread: c.unread || 0, favorite: !!c.favorite, archived: !!c.archived, muted: !!c.muted })),
     };
   }
+
+  // ---------------------------------------------------------------- agenda : fichier .ics ou lien prérempli
+  // Aucun compte, aucun accès à l'agenda : rien n'est enregistré avant que la personne valide dans son application de calendrier.
+  const CAL = window.T2PCAL;
+  function calOpen(kind, p) {
+    if (!CAL || !p || !p.s || !p.e || isNaN(new Date(p.s)) || isNaN(new Date(p.e))) throw new Error('Cet évènement n’est plus valide : redemandez-le moi.');
+    if (kind === 'ics') {
+      const url = URL.createObjectURL(new Blob([CAL.toICS(p)], { type: 'text/calendar;charset=utf-8' }));
+      const a = h('a', { href: url, download: CAL.filename(p), style: { display: 'none' } }); document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      return { say: `Le fichier **${CAL.filename(p)}** est téléchargé : ouvrez-le (dans vos téléchargements ou depuis la notification) pour l’ajouter à votre calendrier.`, nodone: true };
+    }
+    const a = h('a', { href: kind === 'google' ? CAL.googleUrl(p) : CAL.outlookUrl(p), target: '_blank', rel: 'noopener noreferrer', style: { display: 'none' } }); document.body.append(a); a.click(); a.remove();
+    return { nodone: true, quiet: true };
+  }
+  P.calOpen = calOpen;
+
+  // ---------------------------------------------------------------- suivi de fichiers (GitHub) : fonctions serveur de la migration 010_watchers.sql
+  // conv = identifiant de la discussion (suivi publié dans la discussion, Talk2Piaf Cowork) ou null (suivi personnel, alertes dans Talk2Piaf)
+  const when = (iso) => new Date(iso).toLocaleString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+  const shortLabel = (t) => (t.length > 34 ? t.slice(0, 33) + '…' : t);
+  P.watchOps = {
+    async add(p, conv) {
+      if (!S.online) throw new Error('Pas de connexion : réessayez quand le réseau revient.');
+      const ref = p && p.ref; if (!ref || !ref.owner || !ref.repo) throw new Error('Ce suivi n’est plus valide : redemandez-le moi.');
+      try { await api.rpc('watch_add', { p_conv: conv || null, p_provider: 'github', p_ref: ref, p_label: String(p.label || '').slice(0, 200) }); } catch (e) { throw new Error(errText(e)); }
+      return { say: conv ? `👀 Suivi activé : **${p.label}**. Un message sera publié dans la discussion à chaque modification (vérification toutes les 15 minutes environ ; la première sert de point de départ).`
+        : `👀 Suivi activé : **${p.label}**. Je vous préviens ici à chaque modification (vérification toutes les 15 minutes environ ; la première sert de point de départ).`,
+        acts: [{ l: 'Voir les fichiers suivis', a: 'watch_list', p: {} }], nodone: true };
+    },
+    async list(conv, isAdmin) {
+      if (!S.online) throw new Error('Pas de connexion : réessayez quand le réseau revient.');
+      let rows; try { rows = await api.rpc('watch_list', { p_conv: conv || null }); } catch (e) { throw new Error(errText(e)); }
+      if (!rows || !rows.length) return { say: conv ? 'Aucun fichier n’est suivi dans cette discussion. Collez un lien GitHub avec « suis » devant pour en suivre un.' : 'Vous ne suivez aucun fichier. Collez un lien GitHub avec « suis » devant pour en suivre un.', nodone: true };
+      const lines = rows.map((w) => `• **${w.label}**${w.active ? '' : ' (arrêté)'}${conv && !w.mine ? ' — par ' + w.owner_name : ''} — ${w.last_change_at ? 'modifié le ' + when(w.last_change_at) : 'aucune modification vue'}`);
+      return { say: (conv ? 'Fichiers suivis dans cette discussion :\n' : 'Vos fichiers suivis :\n') + lines.join('\n'),
+        acts: rows.filter((w) => w.mine || isAdmin).slice(0, 8).map((w) => ({ l: 'Arrêter : ' + shortLabel(w.label), a: 'watch_stop', p: { id: w.id, n: w.label } })), nodone: true };
+    },
+    async stop(p) {
+      if (!S.online) throw new Error('Pas de connexion : réessayez quand le réseau revient.');
+      try { await api.rpc('watch_remove', { p_id: p.id }); } catch (e) { throw new Error(toCode(e) === 'not_found' ? 'Ce suivi est déjà arrêté.' : errText(e)); }
+      return { say: `Suivi arrêté : **${p.n || 'fichier'}**.` };
+    },
+  };
+
+  // Alertes des suivis personnels : le serveur les dépose, l'application les récupère (au démarrage, au retour au premier plan, toutes les 5 minutes) et les écrit dans cette discussion.
+  let watchOff = false, watchBusy = false;
+  async function pullWatchEvents() {
+    if (watchOff || watchBusy || !S.me || !S.online || document.hidden) return;
+    watchBusy = true;
+    try {
+      let rows; try { rows = await api.rpc('my_watch_events', {}); } catch (e) { if (toCode(e) === 'not_enabled') watchOff = true; return; }
+      if (!rows || !rows.length) return;
+      const s = state(); s.arch = false;
+      for (const r of rows) {
+        const url = r.url && /^https:\/\//.test(r.url) ? r.url : null;
+        const text = String(r.body || '').split('\n').filter((l) => l !== url).join('\n');
+        s.msgs.push({ role: 'assistant', at: nowIso(), text, links: url ? [{ l: 'Voir sur GitHub', u: url }] : [], acts: [{ l: 'Voir les fichiers suivis', a: 'watch_list', p: {} }], chips: [], eph: false });
+      }
+      changed();
+      if (!s.muted) P.notify(nameOf(), String(rows[rows.length - 1].body || '').split('\n').slice(0, 2).join(' — '), '#/talk2piaf', 'watch');
+    } finally { watchBusy = false; }
+  }
+  setTimeout(pullWatchEvents, 5000);
+  setInterval(pullWatchEvents, 300000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) pullWatchEvents(); });
 
   // ---------------------------------------------------------------- actions : de vraies opérations de l'application
   const convById = (id) => (S.convs || []).find((c) => c.conversation_id === id);
@@ -215,6 +281,8 @@
     },
     forget: () => ({ clear: true }),
     reveal: (p) => ({ say: p.t }),
+    cal_ics: (p) => calOpen('ics', p), cal_google: (p) => calOpen('google', p), cal_outlook: (p) => calOpen('outlook', p),
+    watch_add: (p) => P.watchOps.add(p, null), watch_list: () => P.watchOps.list(null, false), watch_stop: (p) => P.watchOps.stop(p),
   };
 
   // ---------------------------------------------------------------- écran de discussion (mêmes composants que les autres discussions)

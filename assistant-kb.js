@@ -21,6 +21,9 @@ const enc = encodeURIComponent;
 const A = (l, a, p) => ({ l, a, p: p || {} });   // bouton d'action
 const LK = (l, u) => ({ l, u });                  // lien externe
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+// Évènements de calendrier et suivi de fichiers (modules communs avec Talk2Piaf Cowork)
+const CAL = typeof module === 'object' && module.exports ? require('./assistant-calendar.js') : root.T2PCAL;
+const WATCH = typeof module === 'object' && module.exports ? require('./assistant-watch.js') : root.T2PWATCH;
 
 // Moteurs de recherche proposés dans Paramètres (%s = requête encodée). « custom » : adresse https saisie par la personne.
 const ENGINES = [
@@ -53,7 +56,7 @@ T('about', 'Qu’est-ce que Piaf ?', ['=piaf', 'qu est ce que piaf', 'c est quoi
   'Piaf est une **messagerie privée** en français, pensée pour le smartphone : discussions à deux, groupes, photos et vidéos, réactions, réponses… Son principe central : **on l’utilise sans adresse e-mail et sans numéro de téléphone**. Vous avez un identifiant à 8 chiffres et un code secret, c’est tout.',
   { next: ['features', 'no_email', 'create_account', 'install'] });
 T('features', 'Quelles sont les fonctionnalités de Piaf ?', ['fonctionnalite', 'que peut faire piaf', 'que propose piaf', 'possibilites', 'liste des fonctions', 'qu est ce qu on peut faire'],
-  'Voici ce que Piaf sait faire :\n• discussions à deux et **groupes** (2 à 32 personnes)\n• messages en temps réel : réponse, modification, réaction, transfert, épinglage, recherche\n• **photos, vidéos et audio** (messages vocaux compris) avec galerie\n• **sondages** et **listes de tâches** collaboratives\n• **mentions** avec @\n• statuts d’envoi : envoyé, distribué, lu\n• favoris, archives, silence par discussion\n• blocage et signalement\n• thème clair ou sombre, notifications, installation sur l’écran d’accueil\n• envoi de messages hors connexion (ils partent au retour du réseau)',
+  'Voici ce que Piaf sait faire :\n• discussions à deux et **groupes** (2 à 32 personnes)\n• messages en temps réel : réponse, modification, réaction, transfert, épinglage, recherche\n• **photos, vidéos et audio** (messages vocaux compris) avec galerie\n• **sondages** et **listes de tâches** collaboratives\n• **mentions** avec @\n• statuts d’envoi : envoyé, distribué, lu\n• favoris, archives, silence par discussion\n• blocage et signalement\n• **évènements de calendrier** (fichier .ics, Google Agenda, Outlook) et **suivi de fichiers GitHub**\n• thème clair ou sombre, notifications, installation sur l’écran d’accueil\n• envoi de messages hors connexion (ils partent au retour du réseau)',
   { next: ['groups_intro', 'poll_create', 'todo_create', 'voice_send'] });
 T('why_piaf', 'Pourquoi cette application s’appelle Piaf ?', ['pourquoi piaf', 'nom piaf', 'origine nom', 'signification piaf', 'logo', 'oiseau logo', 'pourquoi un oiseau', 'nom de l application'],
   '« Piaf » est un mot familier français pour désigner un moineau, et plus largement un petit oiseau — d’où le logo. Un nom léger pour une messagerie légère : des messages qui s’envolent d’un téléphone à l’autre.',
@@ -361,6 +364,20 @@ T('contact_dev', 'Comment contacter l’éditeur de Piaf ?', ['suggestion', 'ide
   'Piaf est développé par **Ehorg**. Les coordonnées de l’éditeur sont indiquées dans la page **Confidentialité** (quand elles sont renseignées) : c’est le bon endroit pour envoyer une suggestion, un signalement de bug ou une demande concernant vos données.',
   { acts: [A('Ouvrir la page Confidentialité', 'privacy')], next: ['who_made', 'bug'] });
 
+// ---- Agenda et suivi de fichiers
+T('cal_howto', 'Comment ajouter un évènement à mon agenda ?', ['ajouter agenda', 'ajouter calendrier', 'evenement calendrier', 'evenement agenda', 'calendrier', 'agenda', 'enregistrer un evenement', 'rendez vous agenda', 'ics', 'google agenda', 'outlook agenda', 'rappel evenement', 'noter un rendez vous'],
+  'Dites-moi l’évènement avec sa date, par exemple :\n« ajoute au calendrier dentiste demain à 14h »\n« mets dans l’agenda dîner chez Marie samedi 20h »\nJe prépare l’évènement avec trois boutons : un **fichier .ics** (il s’ouvre dans l’application Calendrier de votre appareil : Apple, Samsung, Outlook, Google…) ou un lien **Google Agenda** ou **Outlook**. L’évènement n’est enregistré qu’après votre validation dans votre calendrier : Piaf n’a aucun accès à votre agenda ni à votre compte.',
+  { next: ['connect_status', 'watch_howto'] });
+T('connect_status', 'Piaf peut-il se connecter à mes agendas et à mes documents ?', ['connecter agenda', 'connecteur', 'connecteurs', 'synchroniser agenda', 'synchronisation agenda', 'relier compte', 'lier mon compte google', 'compte microsoft', 'compte google', 'office 365', 'google workspace', 'integration', 'integrations', 'brancher'],
+  'Voici où en sont les connexions avec vos outils :\n• **Calendrier** : l’ajout d’un évènement en un appui (fichier .ics ou lien Google Agenda / Outlook) est disponible ; la synchronisation automatique avec votre compte n’est **pas** disponible.\n• **Suivi de fichiers GitHub** (dépôts publics) : disponible ; je vous préviens à chaque modification.\n• **Word, Excel, PowerPoint, Google Docs, Sheets** : pas encore. Il faudrait relier votre compte Microsoft ou Google avec une autorisation de lecture.\nPiaf continue de fonctionner sans e-mail ni compte externe : rien de tout cela n’est obligatoire.',
+  { next: ['cal_howto', 'watch_howto', 'watch_office'] });
+T('watch_howto', 'Comment suivre les modifications d’un fichier ?', ['suivre un fichier', 'suivre fichier', 'suivi de fichier', 'suivi fichier', 'surveiller un fichier', 'etre prevenu modification', 'prevenir quand modifie', 'fichier modifie', 'suivre github', 'github', 'depot', 'suivre un depot', 'notification modification'],
+  'Collez le lien d’un **dépôt, dossier ou fichier GitHub public** avec « suis » devant, par exemple :\n« suis https://github.com/propriétaire/dépôt/blob/main/README.md »\nJe prépare un bouton « Suivre » ; une fois lancé, le serveur vérifie environ toutes les 15 minutes et je vous préviens ici à chaque modification. Vous pouvez suivre 10 éléments au plus. Tapez « mes suivis » pour les voir ou en arrêter un. Les dépôts privés ne sont pas accessibles.',
+  { next: ['watch_office', 'connect_status', 'cal_howto'] });
+T('watch_office', 'Puis-je suivre un document Word, Excel ou Google Docs ?', ['fichier excel', 'fichier word', 'fichier powerpoint', 'document word', 'document excel', 'suivre un fichier excel', 'suivre un fichier word', 'suivre un fichier powerpoint', 'suivre un document word', 'suivre un document excel', 'word', 'excel', 'powerpoint', 'google docs', 'google sheets', 'google drive', 'onedrive', 'sharepoint', 'document office', 'fichier office', 'microsoft office', 'suivre un document', 'suivre document', 'google doc', 'tableur'],
+  (ctx) => ({ text: WATCH ? WATCH.unsupported('microsoft', false) : 'Pas encore.', topic: 'watch_office' }),
+  { next: ['watch_howto', 'connect_status'] });
+
 // ---- À propos de l'assistant
 T('what_can_you_do', 'Que peux-tu faire ?', ['aide', 'aide moi', 'help', 'que peux tu faire', 'que sais tu faire', 'tes capacites', 'tes fonctions', 'comment ca marche', 'a quoi tu sers', 'que sais tu', 'quoi demander', 'menu', 'possibilites assistant', 'peux tu m aider', 'besoin d aide', 'sujets'],
   'Je suis l’assistant de Piaf. Je peux :\n• **répondre** à vos questions sur le compte, les discussions, les groupes, les médias, la sécurité et les réglages\n• **agir à votre place** par des boutons : ouvrir un écran, démarrer une discussion avec un identifiant, mettre une discussion en favori, changer le thème, activer les notifications, inviter un ami, envoyer un message…\n• **vous guider** sur les sondages, les listes de tâches, les messages vocaux et l’espace de médias\n• comprendre une **mention** : écrivez « @ » pour choisir un contact\n• vous donner **l’heure**, **calculer**, tirer au sort, raconter une **blague**, aider à écrire un message\n• vous orienter vers des **liens** utiles\nPar exemple : « écris à @Marie : j’arrive », « mes messages non lus », « libérer de l’espace », « comment créer un sondage ? ».',
@@ -550,6 +567,9 @@ const SEND_LEAD = /^(?:peux[- ]tu\s+|pouvez[- ]vous\s+|tu peux\s+|vous pouvez\s+
 const OPEN_LEAD = /^(?:peux[- ]tu\s+|pouvez[- ]vous\s+)?(?:ouvre|ouvrir|affiche|afficher|montre|montrer|va chez|va voir|aller voir|aller chez|parle a|parler a|discute avec|discuter avec|contacte|contacter|retourne chez|retrouve|trouve)?\s*(?:la discussion (?:avec|de)|la conversation (?:avec|de)|le groupe)?\s*$/;
 
 const HANDLERS = [
+  // 0. « ajoute au calendrier dentiste demain 14h » ; « suis https://github.com/… » (brouillon + boutons, rien n'est fait avant l'appui)
+  (q, qn, qt, ctx, mem) => { const r = CAL ? CAL.reply(q, ctx.now, mem, {}) : null; if (r && r.hint) { r.text += '\n' + r.hint; delete r.hint; } return r; },
+  (q, qn, qt, ctx, mem) => (WATCH ? WATCH.reply(q, { scope: 'self' }, mem) : null),
   // 1. détresse : réponse calme et ressources, sans autre suggestion
   (q, qn) => {
     if (!/suicid|me tuer|envie de mourir|veux mourir|veux plus vivre|en finir avec la vie|plus envie de vivre|me faire du mal|m automutil|me suicider|mettre fin a mes jours/.test(qn)) return null;

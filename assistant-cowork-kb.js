@@ -34,6 +34,9 @@ const LK = (l, u) => ({ l, u });                  // lien externe
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 const plural = (n, a, b) => (n > 1 ? b : a);
+// Évènements de calendrier et suivi de fichiers (modules communs avec Talk2Piaf)
+const CAL = typeof module === 'object' && module.exports ? require('./assistant-calendar.js') : root.T2PCAL;
+const WATCH = typeof module === 'object' && module.exports ? require('./assistant-watch.js') : root.T2PWATCH;
 
 // ------------------------------------------------------------------ accès au contexte
 // valeurs de la migration 009 : sondage 2 à 12 options, question 300, option 100, clôture dans l'année ; liste : titre 100, 50 éléments à la création (100 au total), élément 200
@@ -57,7 +60,7 @@ function T(id, q, kw, text, o) {
 
 // ---- Qui je suis
 T('about_cowork', 'Que peux-tu faire dans ce groupe ?', ['que peux tu faire', 'que sais tu faire', 'que fais tu', 'a quoi tu sers', 'a quoi sers tu', 'fonctionnalite', 'possibilite', 'talk2piaf cowork', 'cowork', 'ce que tu sais faire'],
-  'Je suis **Talk2Piaf Cowork**, l’assistant de la vie de groupe. À votre demande, je prépare :\n• des **sondages** (choix unique ou multiple, anonymes, avec une durée) : créer, clôturer, voir les résultats\n• des **listes collaboratives** (courses, cadeaux, covoiturage…) : créer, ajouter, cocher, attribuer\n• la **recherche dans la conversation** : un mot, un auteur, une période, les photos, les liens, les messages épinglés\n• des réponses sur le groupe : membres, rôles, historique, médias\nMes réponses sont publiées dans la discussion et conservées avec elle. Les actions, elles, partent d’un bouton que **seule la personne qui m’appelle** voit : **rien n’est créé avant son appui**. Pour ce qui ne concerne que votre appareil (thème, écrire à quelqu’un, bloquer…), je vous passe à **Talk2Piaf**.',
+  'Je suis **Talk2Piaf Cowork**, l’assistant de la vie de groupe. À votre demande, je prépare :\n• des **sondages** (choix unique ou multiple, anonymes, avec une durée) : créer, clôturer, voir les résultats\n• des **listes collaboratives** (courses, cadeaux, covoiturage…) : créer, ajouter, cocher, attribuer\n• la **recherche dans la conversation** : un mot, un auteur, une période, les photos, les liens, les messages épinglés\n• des **évènements de calendrier** (fichier .ics, Google Agenda, Outlook) et le **suivi d’un fichier GitHub** : un message est publié dans la discussion à chaque modification\n• des réponses sur le groupe : membres, rôles, historique, médias\nMes réponses sont publiées dans la discussion et conservées avec elle. Les actions, elles, partent d’un bouton que **seule la personne qui m’appelle** voit : **rien n’est créé avant son appui**. Pour ce qui ne concerne que votre appareil (thème, écrire à quelqu’un, bloquer…), je vous passe à **Talk2Piaf**.',
   { next: ['poll_howto', 'list_howto', 'search_howto', 'cowork_vs_t2p'] });
 T('cowork_vs_t2p', 'Quelle différence entre Talk2Piaf Cowork et Talk2Piaf ?', ['difference', 'talk2piaf', 'cowork ou talk2piaf', 'lequel choisir', 'deux assistants', 'quel assistant', 'qui fait quoi'],
   '**Talk2Piaf Cowork** agit pour **tout le groupe** : sondages, listes collaboratives, recherche dans la conversation, informations sur les membres. Ses réponses sont publiées dans la discussion et conservées dans le cloud.\n**Talk2Piaf** s’occupe de **votre appareil** : thème, écrire un message à quelqu’un, bloquer, favoris, archives, silence, notifications, réglages du compte, et toutes les questions sur l’application. Il répond en local, en privé : rien n’est envoyé ni conservé sur le serveur.\nSi vous me demandez quelque chose qui relève de Talk2Piaf, je vous propose un bouton pour le lui transmettre.',
@@ -176,6 +179,20 @@ T('media_quota', 'Quelle est la limite de photos et de vidéos du groupe ?', ['q
 T('group_size', 'Combien de personnes dans un groupe ?', ['combien de membres', 'nombre de membres', 'taille du groupe', 'limite de membres', 'maximum de personnes', 'participants', 'jusqu a combien'],
   'Un groupe réunit de **2 à 32 personnes**. Si vous voulez savoir qui est dans celui-ci, demandez « qui est dans le groupe ? ».',
   { next: ['members_howto', 'grp_roles'] });
+
+// ---- Agenda et suivi de fichiers
+T('cal_howto_cw', 'Comment ajouter un évènement du groupe à mon agenda ?', ['ajouter agenda', 'ajouter calendrier', 'evenement calendrier', 'evenement agenda', 'calendrier', 'agenda', 'enregistrer un evenement', 'rendez vous agenda', 'ics', 'google agenda', 'outlook agenda', 'noter un rendez vous', 'date du groupe'],
+  (ctx) => `Écrivez par exemple :\n« ${handleOf(ctx)} ajoute au calendrier dîner chez Marie samedi 20h »\nJe publie l’évènement (titre, jour, heure) dans la discussion et je vous donne trois boutons, **visibles de vous seul** : un **fichier .ics** (Apple, Samsung, Outlook, Google…) ou un lien **Google Agenda** ou **Outlook**. L’évènement n’est enregistré dans **votre** calendrier qu’après votre validation ; les autres membres peuvent me demander la même chose pour le leur. Piaf n’a aucun accès aux agendas.`,
+  { next: ['connect_status_cw', 'watch_howto_cw'] });
+T('connect_status_cw', 'Talk2Piaf Cowork peut-il se connecter à nos agendas et à nos documents ?', ['connecter agenda', 'connecteur', 'connecteurs', 'synchroniser agenda', 'synchronisation agenda', 'relier compte', 'compte microsoft', 'compte google', 'office 365', 'google workspace', 'integration', 'integrations', 'brancher'],
+  'Voici où en sont les connexions avec vos outils :\n• **Calendrier** : l’ajout d’un évènement en un appui (fichier .ics ou lien Google Agenda / Outlook) est disponible ; la synchronisation automatique avec un compte n’est **pas** disponible.\n• **Suivi de fichiers GitHub** (dépôts publics) : disponible ; un message est publié dans la discussion à chaque modification.\n• **Word, Excel, PowerPoint, Google Docs, Sheets** : pas encore. Il faudrait relier un compte Microsoft ou Google avec une autorisation de lecture.\nRien de tout cela n’est obligatoire : Piaf reste utilisable sans e-mail ni compte externe.',
+  { next: ['cal_howto_cw', 'watch_howto_cw', 'watch_office_cw'] });
+T('watch_howto_cw', 'Comment suivre les modifications d’un fichier dans ce groupe ?', ['suivre un fichier', 'suivre fichier', 'suivi de fichier', 'suivi fichier', 'surveiller un fichier', 'prevenir le groupe modification', 'fichier modifie', 'suivre github', 'github', 'depot', 'suivre un depot', 'mes suivis'],
+  (ctx) => `Écrivez par exemple :\n« ${handleOf(ctx)} suis https://github.com/propriétaire/dépôt/blob/main/README.md »\nJe prépare un bouton « Suivre » pour vous. Une fois lancé, le serveur vérifie environ toutes les 15 minutes et **un message est publié dans la discussion** à chaque modification du dépôt, dossier ou fichier GitHub public. Un groupe peut suivre 5 éléments au plus. Demandez « mes suivis » pour les voir ou les arrêter : chacun arrête les siens, les administrateurs arrêtent tous ceux du groupe. Les dépôts privés ne sont pas accessibles.`,
+  { next: ['watch_office_cw', 'connect_status_cw', 'cal_howto_cw'] });
+T('watch_office_cw', 'Peut-on suivre un document Word, Excel ou Google Docs dans ce groupe ?', ['fichier excel', 'fichier word', 'fichier powerpoint', 'document word', 'document excel', 'suivre un fichier excel', 'suivre un fichier word', 'suivre un fichier powerpoint', 'suivre un document word', 'suivre un document excel', 'word', 'excel', 'powerpoint', 'google docs', 'google sheets', 'google drive', 'onedrive', 'sharepoint', 'document office', 'fichier office', 'microsoft office', 'suivre un document', 'suivre document', 'google doc', 'tableur'],
+  () => ({ text: WATCH ? WATCH.unsupported('microsoft', true) : 'Pas encore.', topic: 'watch_office_cw' }),
+  { next: ['watch_howto_cw', 'connect_status_cw'] });
 
 // ---- Conversation courante
 T('greeting_w', 'Bonjour', ['=bonjour', '=salut', '=coucou', '=hello', '=bonsoir', '=hey', '=yo'],
@@ -321,6 +338,9 @@ const itemLine = (it) => (it.done ? '✅ ' : '▫️ ') + it.t + (it.who ? ' —
 
 // ------------------------------------------------------------------ commandes dynamiques
 const HANDLERS = [
+  // 0. évènement de calendrier (le bouton est privé : il ajoute l'évènement au calendrier de la personne qui m'appelle) et suivi de fichier pour la discussion
+  (q, qn, qs, ctx, mem) => (CAL ? CAL.reply(q, ctx.now, mem, { topic: 'cal_howto_cw', hint: 'Boutons visibles de vous seul : l’évènement n’est ajouté qu’après votre validation dans votre calendrier. Les autres membres peuvent me demander la même chose pour le leur.' }) : null),
+  (q, qn, qs, ctx, mem) => (WATCH && ctx.conv ? WATCH.reply(q, { scope: 'group' }, mem) : null),
   // 1. détresse : réponse calme et ressources, sans autre suggestion
   (q, qn) => {
     if (!/suicid|me tuer|envie de mourir|veux mourir|veux plus vivre|en finir avec la vie|plus envie de vivre|me faire du mal|m automutil|me suicider|mettre fin a mes jours/.test(qn)) return null;

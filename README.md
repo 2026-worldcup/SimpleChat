@@ -23,6 +23,7 @@ Le code de l'application, le schéma SQL, les politiques de sécurité et les Ed
 - Listes de tâches collaboratives : éléments cochables, assignation à un membre (groupes), droits « les membres peuvent ajouter / cocher » réglables, effacement des éléments terminés.
 - Audio : messages vocaux (enregistrement depuis le micro, 10 minutes maximum) et envoi de fichiers audio (10 Mo maximum), lecteur avec position et vitesse, comptés dans le quota de la conversation, listés dans la galerie.
 - Assistant Talk2Piaf (version simple, locale) : boutons d'action réutilisables (seuls envoi de message, blocage/déblocage, révocation des sessions et effacement de l'historique sont à usage unique), boutons moins arrondis, « @contact » dans la saisie (« écris à @Marie : … », « ouvre @Marie », « bloque @Marie »), moteur de recherche au choix dans Paramètres → Assistant Talk2Piaf (réglage local), réponses sur sondages, listes de tâches, audio/vocaux, libération d'espace (bouton « espace utilisé par discussion »).
+- **Connecteurs** (Talk2Piaf et Talk2Piaf Cowork) : **calendrier sans compte** (« rappelle-moi demain à 14h : dentiste » → fichier .ics, lien Google Agenda ou Outlook, préparés sur l'appareil, rien n'est envoyé avant l'appui) et **suivi de fichiers GitHub publics** (« suis https://github.com/… » : vérification serveur toutes les 15 minutes, alerte à chaque modification ; dans un groupe, publiée comme message de l'assistant). Word, Excel, Google Docs et Drive sont reconnus mais **pas encore branchés** (liaison de compte requise). Mise en place et faisabilité : `docs/CONNECTEURS.md`.
 - Coches : 1 coche = envoi en cours ; 2 coches grises = le message est bien arrivé sur le serveur ; 2 coches colorées = lu.
 - Groupes (2 à 32 personnes) : création depuis ses discussions et groupes communs, rôles administrateur/membre, ajout/retrait, départ, photo carrée et nom du groupe, cadrage des photos (déplacer + zoomer), historique masqué aux nouveaux arrivants, accusés « lu par N/M », suppression par un administrateur, quota de médias par groupe. **Testés côté base de données ; interface et fonctions serveur non testées de bout en bout.**
 - Blocage, signalement, thème clair/sombre, notifications locales (application ouverte ou en arrière-plan).
@@ -44,6 +45,8 @@ assistant-kb.js      ← Talk2Piaf : base de connaissances + moteur de réponse 
 assistant.js         ← Talk2Piaf : fenêtre de discussion et boutons d'action (vraies opérations de l'application)
 assistant-cowork-kb.js ← Talk2Piaf Cowork : moteur de réponse du groupe (sondages, listes, recherche), sans dépendance, testable sous Node
 assistant-cowork.js  ← Talk2Piaf Cowork : liaison avec l'application (contexte de la discussion, boutons → fonctions serveur de la migration 009)
+assistant-calendar.js ← connecteur calendrier : dates en français → fichier .ics / liens Google Agenda et Outlook (sans dépendance)
+assistant-watch.js   ← connecteur suivi de fichiers : reconnaissance des liens GitHub / Office / Google, préparation du bouton « Suivre »
 config.js            ← URL du projet + clé PUBLIQUE (publishable) uniquement
 vendor/supabase.js   ← supabase-js 2.117.2 (publiée le 25/09/2026), copiée localement
 sw.js, manifest.webmanifest, icons/                                    ← PWA
@@ -56,6 +59,7 @@ supabase/migrations/005_find_user_exact.sql  recherche par identifiant exact
 supabase/migrations/006_avatars.sql      photos de profil
 supabase/migrations/007_groups.sql       groupes (contrainte appliquée sous le nom conversations_shape_check)
 supabase/migrations/009_collab.sql        historique des groupes masqué au niveau des tables, sondages, listes de tâches, audio, réponse publique de l'assistant, mentions non lues
+supabase/migrations/010_watchers.sql   suivi de fichiers GitHub : tables, fonctions, alertes (à compléter par l'Edge Function `watch` et une tâche planifiée, voir docs/CONNECTEURS.md)
 PLAN_GROUPES.md      plan de la gestion des groupes
 supabase/functions/auth/                inscription, connexion, suppression de compte
 supabase/functions/media/               finalisation d'envoi, suppression réelle, nettoyage
@@ -68,6 +72,8 @@ Talk2Piaf figure **dans la liste des discussions** (avec l'étiquette « Assista
 ### Assistant Talk2Piaf Cowork (discussions et groupes)
 Talk2Piaf reste l'assistant **local** de l'appareil (route `#/talk2piaf`). Dans les discussions et les groupes, c'est **Talk2Piaf Cowork** qui répond (`assistant-cowork-kb.js`, `assistant-cowork.js`) : même principe (moteur sans réseau ni modèle distant, brouillon + bouton, rien n'est fait avant l'appui), mais ses **réponses sont publiques et sauvegardées dans le cloud**. Il lit l'état réel de la discussion (membres et rôles, sondages et listes via `Piaf.ext.snapshot`) et respecte les règles de la migration 009 : sondage de 2 à 12 options (question 300 caractères, option 100, clôture automatique dans l'année, options en double refusées), liste de 50 éléments à la création et 100 au total, droits « les membres peuvent ajouter / cocher », sondage ou liste modifiable par son auteur et les administrateurs, pas d'archivage de liste (on efface les éléments terminés ou on supprime la liste). La suppression passe par `delete_message_for_all` après confirmation.
 Tests : `node tests/assistant-cowork-kb.test.js` (moteur) et `node tests/cowork-rpc.test.js` (chaque appel serveur de `assistant-cowork.js` est comparé aux signatures de `supabase/migrations/009_collab.sql`).
+
+Tests des connecteurs : `node tests/assistant-calendar.test.js`, `node tests/connectors-kb.test.js` et `node --experimental-strip-types tests/watch-lib.test.mjs` (ce dernier accepte `LIVE=1 LIVE_REPO=… LIVE_PATH=…` pour un essai réel contre GitHub).
 
 Tests du moteur Talk2Piaf : `node tests/assistant-kb.test.js` (sans dépendance). Toute modification de `TOPICS` doit les laisser au vert : en particulier, chaque question proposée en puce doit renvoyer à son propre sujet.
 
