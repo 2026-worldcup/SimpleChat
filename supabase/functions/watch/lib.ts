@@ -33,7 +33,7 @@ export function commitsUrl(r: GhRef, perPage = 10): string {
 
 // Texte venu de GitHub (message de commit, nom d'auteur) : on retire les caractères de contrôle et les liens, qui n'ont pas à être relayés tels quels dans une discussion.
 export function clean(s: unknown, max: number): string {
-  let t = String(s ?? "").replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]+/g, " ").replace(/https?:\/\/\S+/gi, "[lien]").replace(/\s+/g, " ").trim();
+  let t = String(s ?? "").replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]+/g, " ").replace(/https?:\/\/\S+/gi, "[lien]").replace(/\s+/g, " ").trim();
   if (t.length > max) t = t.slice(0, max - 1) + "…";
   return t;
 }
