@@ -107,10 +107,12 @@ Piaf.views.chat = (route) => {
   const cfg = () => S.cfg;
   const isGroup = () => conv?.kind === 'group';
   const isAdmin = () => isGroup() && conv.my_role === 'admin';
-  let members = new Map(), membersVer = 0, membersAt = 0, membersTimer = null;
+  let members = new Map(), membersVer = 0, membersAt = 0, membersTimer = null, hiddenAt = Date.now();
+  const onHide = () => { if (document.hidden) hiddenAt = Date.now(); };
+  document.addEventListener('visibilitychange', onHide);
   const senderName = (id) => (id === me() ? 'Vous' : isGroup() ? (members.get(id)?.display_name || 'Ancien membre') : name());
   async function loadMembers(force) {
-    if (!isGroup() || (!force && Date.now() - membersAt < 15000)) return; membersAt = Date.now();
+    if (!isGroup() || (!force && Date.now() - membersAt < 120000)) return; membersAt = Date.now();
     try {
       const rows = await api.rpc('group_members', { p_conv: convId }); if (destroyed) return;
       members = new Map(rows.map((r) => [r.user_id, r])); membersVer++; rows.forEach((r) => { if (r.avatar_path) S.avatars[r.user_id] = r.avatar_path; }); render();
@@ -751,7 +753,8 @@ Piaf.views.chat = (route) => {
     bus.on('outbox', (c) => { if (c === convId) { render(); if (atBottom) scrollBottom(); } }),
     bus.on('convs', () => { conv = Piaf.conv(convId) || conv; drawHeader(); loadMembers(); }),
     bus.on('resync', () => { syncLatest(); loadQuota(); loadMembers(true); }),
-    bus.on('visible', () => { syncLatest(); scheduleRead(); loadMembers(true); }),
+    // Retour au premier plan : le temps réel a déjà tout livré si la connexion est restée active et que l'absence a été courte
+    bus.on('visible', () => { if (S.rt !== 'SUBSCRIBED' || Date.now() - hiddenAt > 60000) { syncLatest(); loadMembers(true); } scheduleRead(); }),
     bus.on('viewport', () => { if (atBottom) scrollBottom(); }),
   ];
 
@@ -767,10 +770,10 @@ Piaf.views.chat = (route) => {
       const pinned = await api.q(sb.from('my_messages').select(COLS).eq('conversation_id', convId).not('pinned_at', 'is', null).is('deleted_at', null).limit(5)); pinned.forEach((r) => pins.set(r.id, r));
     } catch (e) { list.replaceChildren(h('div', { class: 'empty' }, h('p', null, errText(e)), h('button', { class: 'btn', onclick: init }, 'Réessayer'))); return; }
     render(); scrollBottom(); loadQuota(); scheduleRead(); Piaf.flushOutbox();
-    if (isGroup()) { loadMembers(true); membersTimer = setInterval(() => { if (!document.hidden) loadMembers(true); }, 20000); }
+    if (isGroup()) loadMembers(true); // plus de sondage périodique : les changements de membres arrivent par le temps réel (bus « member »)
   }
   syncSend();
-  return { el, mounted() { init(); }, destroy() { destroyed = true; clearInterval(membersTimer); clearTimeout(extTimer); if (recorder) recorder.cancel(); unsubs.forEach((u) => u()); clearTimeout(markTimer); uploads.forEach((j) => { if (j.xhr && j.status === 'uploading') { j.xhr.abort(); api.media({ action: 'abort', ids: [j.id] }).catch(() => {}); } }); tray.forEach((t) => t.url && URL.revokeObjectURL(t.url)); } };
+  return { el, mounted() { init(); }, destroy() { destroyed = true; clearInterval(membersTimer); document.removeEventListener('visibilitychange', onHide); clearTimeout(extTimer); if (recorder) recorder.cancel(); unsubs.forEach((u) => u()); clearTimeout(markTimer); uploads.forEach((j) => { if (j.xhr && j.status === 'uploading') { j.xhr.abort(); api.media({ action: 'abort', ids: [j.id] }).catch(() => {}); } }); tray.forEach((t) => t.url && URL.revokeObjectURL(t.url)); } };
 };
 
 // ================================================================== galerie des médias partagés

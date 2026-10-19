@@ -172,7 +172,7 @@
     } finally { watchBusy = false; }
   }
   setTimeout(pullWatchEvents, 5000);
-  setInterval(pullWatchEvents, 300000);
+  setInterval(pullWatchEvents, 900000); // le serveur ne vérifie que toutes les 15 min : inutile de demander plus souvent
   document.addEventListener('visibilitychange', () => { if (!document.hidden) pullWatchEvents(); });
 
   // ---------------------------------------------------------------- actions : de vraies opérations de l'application

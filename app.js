@@ -260,7 +260,7 @@ function sweepMedia() { if (S.me && navigator.onLine) Piaf.api.media({ action: '
 Piaf.sweepMedia = sweepMedia;
 
 // ------------------------------------------------------------------ conversations (liste partagée)
-let convTimer = null;
+let convTimer = null, avatarsAt = 0; const avatarSeen = new Set();
 async function refreshConvs() {
   S.convs = await rpc('list_conversations');
   try { S.mentions = Object.fromEntries((await rpc('my_unread_mentions')).map((r) => [r.conversation_id, r.n])); } catch { S.mentions = {}; } // nécessite la migration 009
@@ -270,6 +270,9 @@ async function refreshConvs() {
 }
 async function loadAvatars() {
   const ids = [...new Set(S.convs.map((c) => c.other_id).filter(Boolean))]; if (!ids.length) return;
+  // Économie de requêtes : on ne relit les photos que pour un nouveau contact, ou au plus toutes les 5 minutes
+  const fresh = ids.some((id) => !avatarSeen.has(id));
+  if (!fresh && Date.now() - avatarsAt < 300000) return; avatarsAt = Date.now(); ids.forEach((id) => avatarSeen.add(id));
   const rows = await q(sb.from('profiles').select('id,avatar_path').in('id', ids));
   let changed = false;
   for (const r of rows) if ((S.avatars[r.id] || null) !== (r.avatar_path || null)) { S.avatars[r.id] = r.avatar_path; changed = true; }
@@ -338,7 +341,7 @@ Piaf.setGroupAvatar = async (convId, blob) => {
   if (old) sb.storage.from('avatars').remove([old]).catch(() => {});
   await Piaf.refreshConvs();
 };
-Piaf.refreshConvs = () => { clearTimeout(convTimer); return new Promise((res) => { convTimer = setTimeout(() => refreshConvs().then(res, res), 150); }); };
+Piaf.refreshConvs = () => { clearTimeout(convTimer); return new Promise((res) => { convTimer = setTimeout(() => refreshConvs().then(res, res), 500); }); }; // regroupe les rafales d'événements temps réel en un seul rechargement
 Piaf.conv = (id) => S.convs.find((c) => c.conversation_id === id);
 Piaf.convName = (c) => (c.nickname || c.other_name);
 
