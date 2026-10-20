@@ -1,6 +1,9 @@
-/* Talk2Piaf — base de connaissances et moteur de réponse.
-   Aucune dépendance au DOM : le moteur reçoit un « contexte » (état de l'application) et renvoie
-   { text, links, acts, chips, topic }. L'interface (assistant.js) affiche et exécute les actions. */
+/* Talk2Piaf — base de connaissances et moteur de compréhension.
+   Aucune dépendance au DOM : le moteur reçoit un « contexte » (état de l'application, et la discussion ouverte s'il y en a une)
+   et renvoie { text, links, acts, chips, topic }. Il comprend les formulations courantes (politesses, abréviations, fautes de frappe),
+   garde le contexte du message précédent seulement (`mem`), et confie les actions à Talk2Piaf Actions (assistant-actions-kb.js : sondages,
+   listes, recherche dans la discussion) ou prépare lui-même celles de l'appareil (message, blocage, thème, agenda…).
+   L'interface (assistant.js, assistant-actions.js) affiche les réponses et exécute les actions après aperçu ou directement. */
 (function (root) {
 'use strict';
 
@@ -19,11 +22,14 @@ const pick = (a) => a[Math.floor(rand() * a.length)];
 const shuffle = (a) => { const r = a.slice(); for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; } return r; };
 const enc = encodeURIComponent;
 const A = (l, a, p) => ({ l, a, p: p || {} });   // bouton d'action
+const AU = (l, a, p) => ({ l, a, p: p || {}, auto: true }); // action exécutée tout de suite : l'interface la lance, puis laisse la modifier ou l'annuler
 const LK = (l, u) => ({ l, u });                  // lien externe
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-// Évènements de calendrier et suivi de fichiers (modules communs avec Talk2Piaf Cowork)
+// Évènements de calendrier et suivi de fichiers
 const CAL = typeof module === 'object' && module.exports ? require('./assistant-calendar.js') : root.T2PCAL;
 const WATCH = typeof module === 'object' && module.exports ? require('./assistant-watch.js') : root.T2PWATCH;
+// Talk2Piaf Actions : moteur des actions de discussion (sondages, listes, recherche) et ses sujets d'aide
+const ACT = typeof module === 'object' && module.exports ? require('./assistant-actions-kb.js') : root.T2PA;
 
 // Moteurs de recherche proposés dans Paramètres (%s = requête encodée). « custom » : adresse https saisie par la personne.
 const ENGINES = [
@@ -47,6 +53,7 @@ const TOPICS = [];
 const BY_ID = {};
 function T(id, q, kw, text, o) {
   const t = Object.assign({ id, q, kw: kw.filter((k) => k[0] !== '=').map(kwNorm), ex: kw.filter((k) => k[0] === '=').map((k) => kwNorm(k.slice(1))), qn: norm(q), text, next: [], prio: 1 }, o || {});
+  t.raw = kw.map((k) => norm(k[0] === '=' ? k.slice(1) : k)).join(' ').split(' ').filter((w) => w.length >= 4);
   TOPICS.push(t); BY_ID[id] = t; return t;
 }
 const SET = 'Paramètres';
@@ -207,10 +214,10 @@ T('send_photo', 'Comment envoyer une photo ou une vidéo ?', ['envoyer photo', '
 T('media_limits', 'Quelle est la taille maximale des fichiers ?', ['taille maximale', 'taille max', 'poids maximum', 'trop volumineux', 'fichier trop gros', 'fichier trop lourd', 'limite photo', 'limite video', 'taille photo', 'taille video', 'poids photo', 'poids video', 'formats acceptes', 'format photo', 'format video', 'heic', 'mov', 'compresser'],
   'Limites par défaut : **photo 10 Mo**, **vidéo 25 Mo**, **10 fichiers par envoi**. Formats acceptés : JPEG, PNG, WebP, GIF, HEIC (photos) ; MP4, WebM, MOV (vidéos). Les PDF et autres documents ne sont pas acceptés. Si une vidéo est trop lourde, raccourcissez-la ou réduisez sa qualité avant de l’envoyer.',
   { next: ['quota', 'send_photo', 'missing'] });
-T('quota', 'Pourquoi mon espace de médias est-il plein ?', ['quota', 'espace plein', 'stockage plein', 'quota depasse', 'espace media', 'depasse le quota', 'espace utilise', 'combien d espace'],
+T('quota', 'Pourquoi mon espace de médias est-il plein ?', ['quota', 'espace plein', 'stockage plein', 'quota depasse', 'espace media', 'depasse le quota', 'espace utilise', 'combien d espace', 'quota de medias du groupe', 'quota du groupe', 'quota groupe', 'quota de medias'],
   'Chaque discussion dispose d’un quota de médias de **100 Mo**, partagé entre les participants (par groupe pour un groupe) ; les **photos, vidéos et audio** (messages vocaux compris) comptent tous. Quand il est atteint, les nouveaux envois sont bloqués : supprimez des médias **pour tout le monde** pour libérer de l’espace. Télécharger un fichier ne libère pas d’espace sur le serveur ; seule la suppression le fait.',
   { acts: [A('Voir l’espace utilisé par discussion', 'space')], next: ['free_space', 'gallery', 'media_limits'] });
-T('gallery', 'Où retrouver les photos et vidéos d’une discussion ?', ['galerie', 'medias partages', 'voir photos recues', 'retrouver photos', 'toutes les photos', 'telecharger photo', 'enregistrer photo', 'telecharger video', 'sauvegarder photo', 'visionneuse'],
+T('gallery', 'Où retrouver les photos et vidéos d’une discussion ?', ['galerie', 'medias partages', 'voir photos recues', 'retrouver photos', 'toutes les photos', 'telecharger photo', 'enregistrer photo', 'telecharger video', 'sauvegarder photo', 'visionneuse', 'photos du groupe', 'medias du groupe', 'voir les photos du groupe'],
   'Dans la discussion, menu en haut → **« Médias partagés »** : toutes les photos et vidéos en grille, avec la visionneuse plein écran. Pour enregistrer un fichier, touchez son message → « Télécharger ». Les galeries chargent les fichiers d’origine : sur réseau mobile, cela peut consommer des données.',
   { next: ['quota', 'send_photo'] });
 T('delete_media', 'Comment supprimer une photo envoyée ?', ['supprimer photo', 'supprimer video', 'effacer photo', 'effacer video', 'retirer photo', 'photo envoyee par erreur', 'supprimer un media', 'supprimer media'],
@@ -218,7 +225,7 @@ T('delete_media', 'Comment supprimer une photo envoyée ?', ['supprimer photo', 
   { next: ['quota', 'delete_msg'] });
 
 // ---- Sondages, listes de tâches, audio, espace de médias, mentions
-T('poll_create', 'Comment créer un sondage ?', ['sondage', 'sondages', 'creer sondage', 'creer un sondage', 'faire un sondage', 'nouveau sondage', 'lancer un sondage', 'organiser un vote', 'creer un vote', 'poser une question a tout le monde', 'proposer plusieurs options'],
+T('poll_create', 'Comment créer un sondage ?', ['sondage', 'sondages', 'creer sondage', 'creer un sondage', 'faire un sondage', 'nouveau sondage', 'lancer un sondage', 'organiser un vote', 'creer un vote', 'poser une question a tout le monde', 'proposer plusieurs options', 'sondage ca marche', 'sondages ca marche', 'sondage fonctionnement'],
   'Dans une discussion (à deux ou en groupe), touchez le **trombone** puis **« Sondage »**. Saisissez votre question (300 caractères au plus) et **2 à 12 options** (100 caractères chacune). Réglages possibles : **choix multiples** ou choix unique, **vote anonyme**, **ajout d’options par les membres**, et une **clôture automatique** facultative à la date de votre choix. Le sondage s’affiche comme un message de la discussion, et les résultats se mettent à jour en direct.',
   { next: ['poll_vote', 'poll_edit', 'todo_create', 'groups_intro'] });
 T('poll_vote', 'Comment voter à un sondage ?', ['voter', 'comment voter', 'voter sondage', 'voter a un sondage', 'changer mon vote', 'retirer mon vote', 'vote anonyme', 'sondage anonyme', 'qui a vote', 'voir les votes', 'resultats du sondage', 'resultat sondage', 'choix multiples', 'plusieurs reponses sondage', 'vote'],
@@ -227,10 +234,10 @@ T('poll_vote', 'Comment voter à un sondage ?', ['voter', 'comment voter', 'vote
 T('poll_edit', 'Comment modifier ou clore un sondage ?', ['modifier sondage', 'modifier un sondage', 'clore sondage', 'clore un sondage', 'cloturer sondage', 'fermer sondage', 'rouvrir sondage', 'ajouter une option', 'ajouter option sondage', 'sondage erreur', 'cloture automatique', 'terminer sondage', 'parametres du sondage', 'parametres sondage'],
   'Touchez le message du sondage : le menu propose **« Modifier le sondage »** (question, options, choix multiples, anonymat, ajout d’options, clôture automatique) et **« Clore le sondage »** — ou **« Rouvrir le sondage »** s’il est clos. Seuls **l’auteur et les administrateurs** du groupe peuvent les utiliser. Les autres membres peuvent ajouter une option uniquement si l’auteur a autorisé « Les membres peuvent ajouter des options ».',
   { next: ['poll_vote', 'poll_create'] });
-T('todo_create', 'Comment créer une liste de tâches ?', ['liste de taches', 'listes de taches', 'todo', 'to do', 'todo list', 'to do list', 'creer une liste', 'liste de courses', 'checklist', 'liste partagee', 'taches partagees', 'liste collaborative', 'liste a cocher', 'tache', 'taches'],
+T('todo_create', 'Comment créer une liste de tâches ?', ['liste de taches', 'listes de taches', 'todo', 'to do', 'todo list', 'to do list', 'creer une liste', 'liste de courses', 'checklist', 'liste partagee', 'taches partagees', 'liste collaborative', 'liste a cocher', 'tache', 'taches', 'liste ca marche', 'listes ca marche'],
   'Dans une discussion, touchez le **trombone** puis **« Liste de tâches »**. Donnez un **titre** (100 caractères), puis, si vous voulez, saisissez des **éléments, un par ligne** (50 au plus à la création, 200 caractères chacun). Vous réglez aussi qui peut agir : **« Les membres peuvent ajouter et modifier des éléments »** et **« Les membres peuvent cocher les éléments »**. La liste est partagée : chacun la voit évoluer en direct, avec une barre de progression.',
   { next: ['todo_use', 'todo_settings', 'poll_create'] });
-T('todo_use', 'Comment cocher, assigner ou effacer des tâches ?', ['cocher', 'cocher une tache', 'cocher un element', 'assigner une tache', 'assigner un element', 'attribuer une tache', 'effacer les termines', 'supprimer les taches terminees', 'ajouter une tache', 'ajouter un element', 'modifier une tache', 'qui a coche', 'tache terminee', 'supprimer une tache'],
+T('todo_use', 'Comment cocher, assigner ou effacer des tâches ?', ['cocher', 'cocher une tache', 'cocher un element', 'assigner une tache', 'assigner un element', 'attribuer une tache', 'effacer les termines', 'supprimer les taches terminees', 'ajouter une tache', 'ajouter un element', 'modifier une tache', 'qui a coche', 'tache terminee', 'supprimer une tache', 'terminer une liste', 'finir une liste', 'cloturer une liste', 'fermer une liste', 'repartir les taches', 'repartir taches', 'liste terminee'],
   'Dans la liste : touchez la **case** pour cocher ou décocher (le nom de la personne qui l’a faite s’affiche). **« + Élément »** ajoute une tâche. Touchez le **texte** d’un élément pour **« Modifier le texte »**, **« Assigner à… »** (dans un groupe) ou **« Supprimer l’élément »**. **« Effacer les terminés »** retire d’un coup tout ce qui est coché. Ces actions dépendent des droits réglés par l’auteur de la liste.',
   { next: ['todo_settings', 'todo_create'] });
 T('todo_settings', 'Qui peut cocher ou ajouter des éléments à une liste ?', ['droits liste', 'qui peut cocher', 'qui peut ajouter', 'parametres de la liste', 'parametres liste', 'les membres peuvent cocher', 'membres peuvent ajouter', 'liste en lecture seule', 'permissions liste', 'ajout reserve'],
@@ -262,7 +269,7 @@ T('groups_intro', 'Comment fonctionnent les groupes ?', ['groupe', 'groupes', 'd
 T('group_create', 'Comment créer un groupe ?', ['creer groupe', 'creer un groupe', 'nouveau groupe', 'faire un groupe', 'fonder groupe', 'creation groupe', 'monter un groupe', 'ouvrir un groupe'],
   'Sur l’accueil, touchez **+** puis **« Nouveau groupe »**. Donnez-lui un nom (et une photo si vous voulez), puis choisissez les membres parmi **vos contacts** : les personnes avec qui vous avez déjà une discussion et les membres de vos groupes. Vous devenez administrateur. Pour inviter quelqu’un qui n’est pas encore dans vos contacts, commencez d’abord une discussion avec lui via son identifiant.',
   { acts: [A('Créer un groupe', 'go', { h: '#/g/new' }), A('Idées de noms', 'say', { t: 'Idées de nom de groupe' })], next: ['group_members', 'group_ideas', 'group_roles'] });
-T('group_members', 'Comment ajouter ou retirer un membre ?', ['ajouter membre', 'ajouter un membre', 'retirer membre', 'retirer un membre', 'exclure', 'exclure membre', 'virer', 'ajouter quelqu un au groupe', 'inviter dans groupe', 'enlever du groupe', 'supprimer membre'],
+T('group_members', 'Comment ajouter ou retirer un membre ?', ['ajouter membre', 'ajouter un membre', 'retirer membre', 'retirer un membre', 'exclure', 'exclure membre', 'virer', 'ajouter quelqu un au groupe', 'inviter dans groupe', 'enlever du groupe', 'supprimer membre', 'ajouter au groupe', 'ajoute au groupe', 'ajouter quelqu un a un groupe'],
   'Ouvrez le groupe → menu en haut → **« Infos du groupe et membres »**. Les **administrateurs** peuvent y **ajouter des membres** (jusqu’à 32 au total) et **retirer** quelqu’un ; la personne retirée perd l’accès aux messages et aux fichiers du groupe. Un membre ajouté ne voit pas l’historique d’avant son arrivée.',
   { next: ['group_roles', 'group_history', 'group_leave'] });
 T('group_roles', 'Quelle différence entre administrateur et membre ?', ['administrateur', 'admin', 'admins', 'role', 'roles', 'nommer administrateur', 'devenir administrateur', 'droits groupe', 'permissions groupe', 'retirer role administrateur'],
@@ -379,21 +386,37 @@ T('watch_office', 'Puis-je suivre un document Word, Excel ou Google Docs ?', ['f
   { next: ['watch_howto', 'connect_status'] });
 
 // ---- À propos de l'assistant
-T('what_can_you_do', 'Que peux-tu faire ?', ['aide', 'aide moi', 'help', 'que peux tu faire', 'que sais tu faire', 'tes capacites', 'tes fonctions', 'comment ca marche', 'a quoi tu sers', 'que sais tu', 'quoi demander', 'menu', 'possibilites assistant', 'peux tu m aider', 'besoin d aide', 'sujets'],
-  'Je suis l’assistant de Piaf. Je peux :\n• **répondre** à vos questions sur le compte, les discussions, les groupes, les médias, la sécurité et les réglages\n• **agir à votre place** par des boutons : ouvrir un écran, démarrer une discussion avec un identifiant, mettre une discussion en favori, changer le thème, activer les notifications, inviter un ami, envoyer un message…\n• **vous guider** sur les sondages, les listes de tâches, les messages vocaux et l’espace de médias\n• comprendre une **mention** : écrivez « @ » pour choisir un contact\n• vous donner **l’heure**, **calculer**, tirer au sort, raconter une **blague**, aider à écrire un message\n• vous orienter vers des **liens** utiles\nPar exemple : « écris à @Marie : j’arrive », « mes messages non lus », « libérer de l’espace », « comment créer un sondage ? ».',
-  { next: ['features', 'poll_create', 'free_space', 'security_tips', 'joke'] });
-T('who_are_you', 'Qui es-tu ?', ['qui es tu', 'tu es qui', 'presente toi', 'ton nom', 'comment tu t appelles', 'talk2piaf', 'talk to piaf', 'tu t appelles comment', 'qui est talk2piaf'],
-  'Je suis **Talk2Piaf**, l’assistant intégré à Piaf. Je réponds à vos questions sur l’application, je peux réaliser des actions à votre place d’une simple pression sur un bouton, et je m’occupe aussi de quelques petits services du quotidien.',
-  { next: ['what_can_you_do', 'who_made', 'are_you_ai'] });
 T('who_made', 'Qui a créé cet assistant ?', ['qui t a cree', 'qui t a fait', 'qui t a developpe', 'developpeur', 'developpe par', 'createur', 'ehorg', 'qui a cree piaf', 'qui a fait piaf', 'auteur', 'editeur'],
   'J’ai été développé pour Piaf par **Ehorg**.',
   { next: ['contact_dev', 'about'] });
 T('are_you_ai', 'Es-tu une intelligence artificielle ?', ['es tu une ia', 'intelligence artificielle', 'robot', 'chatbot', 'tu es humain', 'vraie personne', 'chatgpt', 'es tu humain', 'tu es un humain', 'une ia', 'vrai assistant', 'modele de langage', 'comment tu fonctionnes', 'tu fonctionnes comment'],
   'Je ne suis pas une personne : je suis l’assistant intégré à Piaf. Je fonctionne **directement sur votre appareil**, à partir d’une base de connaissances sur Piaf et de petites fonctions utiles ; je ne suis pas un grand modèle de langage et je ne consulte pas Internet. C’est pour cela que je suis rapide et que **rien de ce que vous m’écrivez ne quitte votre téléphone**, mais aussi que mes connaissances ont des limites : sur les sujets que je ne maîtrise pas, je vous le dis et je vous oriente.',
   { next: ['assistant_privacy', 'what_can_you_do'] });
-T('assistant_privacy', 'Lis-tu mes messages ?', ['tu lis mes messages', 'acces a mes conversations', 'lis tu mes messages', 'confidentialite assistant', 'tu vois mes messages', 'espionnes tu', 'tu m espionnes', 'historique assistant', 'effacer historique assistant', 'effacer notre discussion', 'ce que je te dis'],
-  'Non : je n’utilise pas le contenu de vos messages. Pour vous aider à ouvrir une discussion ou à la mettre en favori, je me sers uniquement de la **liste de vos discussions** (noms, favoris, messages non lus). Notre échange reste **sur cet appareil**, dans ce navigateur ; il n’est envoyé nulle part, et vous pouvez l’effacer à tout moment depuis le menu en haut de cette fenêtre.',
-  { acts: [A('Effacer notre historique', 'forget')], next: ['privacy', 'are_you_ai'] });
+
+T('what_can_you_do', 'Que peux-tu faire ?', ['aide', 'aide moi', 'help', 'que peux tu faire', 'que sais tu faire', 'tes capacites', 'tes fonctions', 'comment ca marche', 'a quoi tu sers', 'que sais tu', 'quoi demander', 'menu', 'possibilites assistant', 'peux tu m aider', 'besoin d aide', 'sujets'],
+  'Je suis **Talk2Piaf**, l’assistant de Piaf. Je réponds à vos questions sur l’application et je comprends vos demandes écrites avec vos mots. Quand il faut **agir**, je passe la main à **Talk2Piaf Actions** :\n• **Message** : « écris à Marie : j’arrive »\n• **Sondage** et **liste** : « crée un sondage : samedi ou dimanche ? », « ajoute du pain à la liste de courses »\n• **Agenda** : « ajoute au calendrier dentiste demain 14h » (Google Agenda, Outlook ou fichier .ics)\n• **Blocage** : « bloque Marc »\n• **Thème** : « mets le thème sombre »\n• et aussi favoris, archives, silence, notifications, recherche dans une discussion…\nAvant d’agir pour d’autres personnes, je vous montre un **aperçu modifiable** (texte, destinataire, discussion, options) ; les actions qui ne concernent que vous se font tout de suite et restent **modifiables ou annulables**. Vous pouvez m’appeler **dans n’importe quelle discussion** avec @Talk2Piaf : tout reste **sur votre appareil**.',
+  { next: ['t2p_actions', 't2p_call', 'features', 'joke'] });
+T('who_are_you', 'Qui es-tu ?', ['qui es tu', 'tu es qui', 'presente toi', 'ton nom', 'comment tu t appelles', 'talk2piaf', 'talk to piaf', 'tu t appelles comment', 'qui est talk2piaf'],
+  'Je suis **Talk2Piaf**, l’assistant intégré à Piaf. Je réponds à vos questions sur l’application, je comprends vos demandes en langage courant et, avec **Talk2Piaf Actions**, je réalise des actions à votre place (message, sondage, liste, agenda, blocage, thème…) : vous les validez, et vous pouvez toujours les modifier. Je m’occupe aussi de quelques petits services du quotidien.',
+  { next: ['what_can_you_do', 'who_made', 'are_you_ai'] });
+T('assistant_privacy', 'Lis-tu mes messages ?', ['tu lis mes messages', 'acces a mes conversations', 'lis tu mes messages', 'confidentialite assistant', 'tu vois mes messages', 'espionnes tu', 'tu m espionnes', 'historique assistant', 'effacer historique assistant', 'effacer notre discussion', 'ce que je te dis', 'qui voit mes demandes', 'les autres voient'],
+  'Non : je n’utilise pas le contenu de vos messages. Pour vous aider à ouvrir une discussion ou à écrire à quelqu’un, je me sers de la **liste de vos discussions** (noms, favoris, messages non lus) et, quand vous m’appelez dans une discussion, de ses membres, sondages et listes. Ce que vous me demandez et ce que je réponds est **enregistré uniquement sur cet appareil** : ni envoyé aux autres membres, ni sauvegardé sur le serveur. Vous pouvez effacer chaque demande, chaque réponse, ou tout l’échange. Seul le résultat d’une action que vous validez (un message, un sondage, une liste) est publié, comme si vous l’aviez fait vous-même.',
+  { acts: [A('Effacer notre historique', 'forget')], next: ['t2p_erase', 'privacy', 'are_you_ai'] });
+T('t2p_call', 'Comment t’appeler dans une discussion ?', ['appeler', 'invoquer', 'mention talk2piaf', 'mentionner talk2piaf', 'comment te parler', 'comment te contacter', 'comment te demander', 'ou es tu', 'te trouver', 'te parler dans un groupe', 'te parler dans une discussion', 'depuis une discussion', 'arobase talk2piaf', 'comment t appeler', 'comment t invoquer', 'comment on t appelle', 'comment faire appel a toi'],
+  'Dans n’importe quelle discussion, privée ou de groupe, écrivez **@Talk2Piaf** suivi de votre demande, par exemple :\n« @Talk2Piaf crée un sondage : samedi ou dimanche ? »\n« @Talk2Piaf rappelle-moi demain à 14h : dentiste »\nVotre demande n’est **pas envoyée** aux autres : elle apparaît dans un style à part, avec ma réponse, **chez vous seulement**. Vous pouvez aussi me parler depuis ma propre discussion, dans la liste de vos conversations.',
+  { next: ['t2p_actions', 't2p_erase', 'assistant_privacy'] });
+T('t2p_actions', 'Comment fonctionnent les actions de Talk2Piaf ?', ['actions', 'talk2piaf actions', 'apercu', 'modifier avant d envoyer', 'valider', 'annuler une action', 'modifier une action', 'boutons d action', 'comment tu agis', 'agir a ma place', 'confirmation'],
+  'Je comprends votre demande, puis **Talk2Piaf Actions** la prépare :\n• pour ce qui touche **d’autres personnes** (message, sondage, liste, blocage, évènement), vous voyez un **aperçu modifiable** : texte, destinataire, discussion ou groupe, options, noms… puis vous **validez** ;\n• pour ce qui ne concerne que **vous** (thème, favori, silence, notifications…), l’action se fait **tout de suite**, et un bouton permet de la **modifier ou de l’annuler**.\nRien n’est envoyé ni créé pour les autres sans votre validation.',
+  { next: ['t2p_call', 't2p_context', 'send_msg'] });
+T('t2p_erase', 'Comment effacer une demande ou une réponse ?', ['effacer une demande', 'effacer une reponse', 'effacer mes echanges', 'supprimer une reponse', 'supprimer ma demande', 'effacer mes demandes', 'supprimer mes echanges avec talk2piaf', 'effacer la reponse de talk2piaf', 'masquer la reponse'],
+  'Appuyez sur ma réponse ou sur votre demande, puis **« Effacer »** : seule la bulle choisie disparaît. Le menu de la discussion propose aussi **« Effacer mes échanges avec Talk2Piaf »**. Dans ma propre discussion, **« Supprimer l’historique »** efface tout. Comme tout est local, cela ne change rien pour les autres membres : ils n’ont jamais vu ces échanges.',
+  { next: ['assistant_privacy', 't2p_call'] });
+T('t2p_context', 'Te souviens-tu de ce que je dis ?', ['te souviens', 'memoire', 'tu te rappelles', 'contexte', 'tu retiens', 'tu garde en memoire', 'tu comprends la suite', 'message precedent'],
+  'Je garde en tête **votre message précédent** et ma réponse, pas davantage : c’est ce qui me permet de comprendre « oui », « plutôt anonyme », « ajoute du lait » ou « et à Paul ? » juste après une proposition. Au-delà, je repars de zéro : redonnez-moi le contexte dans votre message. Si je ne comprends pas, je vous propose de **reformuler**.',
+  { next: ['t2p_actions', 'what_can_you_do'] });
+T('cowork_gone', 'Que devient Talk2Piaf Cowork ?', ['cowork', 'talk2piaf cowork', 'ancien assistant', 'assistant du groupe', 'que devient cowork', 'cowork supprime', 'ou est cowork'],
+  '**Talk2Piaf Cowork n’existe plus** : il publiait ses réponses dans la discussion. Il est remplacé par **Talk2Piaf**, bien plus complet, qui transmet à **Talk2Piaf Actions** quand il faut agir. Ses réponses restent **locales** : vous seul les voyez. Les anciennes réponses publiques de Cowork déjà présentes dans une discussion restent visibles tant qu’on ne les supprime pas.',
+  { next: ['t2p_call', 'what_can_you_do'] });
 
 // ---- Conversation courante (hors Piaf)
 T('greeting', 'Bonjour', ['bonjour', 'salut', 'coucou', 'hello', 'bonsoir', 'hey', 'yo', 'bonne journee', 'bonne soiree', 'salutations', 'allo'],
@@ -495,6 +518,19 @@ T('general', 'Que sais-tu en dehors de Piaf ?', ['culture generale', 'recette', 
   (c, qn, q) => ({ text: 'Mon domaine, c’est Piaf et quelques petits services (heure, calculs, tirages, blagues, aide à la rédaction). Pour une question de culture générale, une actualité ou une recette, je ne peux pas vous répondre de façon fiable : je vous propose plutôt de lancer la recherche sur une source sérieuse.', links: webLinks(q, c) }),
   { prio: 0.9, next: ['what_can_you_do'] });
 
+// ---- Sujets de Talk2Piaf Actions (sondages, listes, recherche dans une discussion)
+// Les sujets d'Actions qui recoupent ceux de l'application sont renvoyés vers ces derniers (alias) ; les autres sont ajoutés tels quels.
+const ALIAS = { poll_howto: 'poll_create', poll_close_howto: 'poll_edit', poll_edit_cw: 'poll_edit', list_howto: 'todo_create', list_assign_howto: 'todo_use', list_check_howto: 'todo_use', list_close_howto: 'todo_use',
+  list_perms: 'todo_settings', grp_roles: 'group_roles', group_size: 'groups_intro', mention_howto: 'mention_help', media_quota: 'quota', gallery_group: 'gallery', members_howto: 'group_members', grp_identity: 'group_identity',
+  grp_history: 'group_history', grp_read: 'group_read', grp_leave: 'group_leave', grp_delete: 'group_delete' };
+const topicId = (id) => (id && ALIAS[id] && BY_ID[ALIAS[id]] ? ALIAS[id] : id);
+if (ACT) for (const t of ACT.TOPICS) {
+  if (ALIAS[t.id] || BY_ID[t.id]) continue;
+  const c = Object.assign({}, t, { next: t.next.map(topicId).filter((n, i, a) => a.indexOf(n) === i) });
+  TOPICS.push(c); BY_ID[c.id] = c;
+}
+for (const t of TOPICS) t.next = t.next.map(topicId).filter((n, i, a) => n !== t.id && a.indexOf(n) === i);
+
 // ------------------------------------------------------------------ commandes dynamiques (état réel de l'application)
 const ID8_RE = /(?:^|[^\d])([1-9]\d{3})[\s.\-]?(\d{4})(?!\d)/;
 const STOP = new Set(('ouvre ouvrir affiche afficher montre montrer va aller vas allez retourne retrouve retrouver trouve trouver la le les l un une ma mon mes de du des d a au aux avec chez en dans sur et ou pour par ' +
@@ -566,7 +602,114 @@ function mentionOf(q, ctx) {
 const SEND_LEAD = /^(?:peux[- ]tu\s+|pouvez[- ]vous\s+|tu peux\s+|vous pouvez\s+)?(?:(?:envoie|envoi|envoyer|ecris|ecrire|dis|dire|transmets|transmettre)(?:[- ]moi)?\s*(?:un message |le message |un mot |un texte )?(?:a |au |aux |pour )?|message (?:a|pour) |mot (?:a|pour) )?$/;
 const OPEN_LEAD = /^(?:peux[- ]tu\s+|pouvez[- ]vous\s+)?(?:ouvre|ouvrir|affiche|afficher|montre|montrer|va chez|va voir|aller voir|aller chez|parle a|parler a|discute avec|discuter avec|contacte|contacter|retourne chez|retrouve|trouve)?\s*(?:la discussion (?:avec|de)|la conversation (?:avec|de)|le groupe)?\s*$/;
 
+const DRAFTABLE = new Set(['poll_create', 'list_create', 'send', 'cal_ics', 'theme']);
+const convOf = (ctx, id) => (ctx.convs || []).find((c) => c.id === id);
+const REF = /\b(liste|checklist|calendrier|agenda|groupe|membre|favori|archive|contact|discussion|conversation|sondage)\b/;
+// Suites du message précédent : « plutôt anonyme », « ajoute une option », « et à Paul ? », « plutôt à 15h »…
+// Le brouillon précédent (mem.draft) est la seule mémoire : au-delà d'un message, on repart de zéro.
+function followUp(q, qn, qt, ctx, mem) {
+  const d = mem.draft; if (!d || qt.length > 16 || !d.p) return null;
+  if (/\b(?:cree|creer|fais|fait|faire|lance|lancer|nouveau|nouvelle|ajoute au calendrier)\b.*\b(?:sondage|liste|evenement|rendez vous|rdv)\b|\b(?:ecris|envoie|dis)\b.* (?:a|pour) /.test(fold(q)) && !/\b(?:plutot|finalement|non)\b/.test(fold(q))) return null; // une vraie nouvelle demande n'est pas une retouche
+  const P0 = d.p, say = (r, lead) => { r.text = lead + '\n' + r.text; return r; };
+  const fq = fold(q);
+  const g = (re) => { const m = new RegExp(re.source, 'id' + re.flags.replace(/[id]/g, '')).exec(fq); return m && m.indices && m.indices[1] ? q.slice(m.indices[1][0], m.indices[1][1]).trim() : null; }; // capture du texte d'origine (accents, majuscules)
+  const destFor = (id) => { const c = id && convOf(ctx, id); return c ? { id: c.id, name: c.name } : (ctx.conv && id === ctx.conv.id ? { id: ctx.conv.id, name: ctx.conv.name || 'cette discussion' } : null); };
+  const newDest = (txt) => { if (!ACT) return null; const r = ACT.destOf('dans ' + txt, norm('dans ' + txt), Object.assign({}, ctx, { conv: null })); return r && r.named ? r : null; };
+  const DEST = /^(?:plutot |finalement |non )?(?:dans|pour)\s+(?:le groupe |la discussion |la conversation )?(.+)$/;
+  let m, x;
+  if (d.a === 'theme') {
+    const mode = /\b(sombre|noir|nuit|dark)\b/.test(qn) ? 'dark' : /\b(clair|jour|light)\b/.test(qn) ? 'light' : /\b(auto|automatique)\b/.test(qn) ? 'auto' : null;
+    if (!mode || !/\b(plutot|finalement|non|en fait|change|mets|met|remets|autre)\b/.test(qn)) return null;
+    const label = { dark: 'sombre 🌙', light: 'clair ☀️', auto: 'automatique' }[mode];
+    return { text: `D’accord, thème **${label}**.`, acts: [AU('Thème ' + label.split(' ')[0], 'theme', { m: mode })], topic: 'theme', chips: [] };
+  }
+  if (d.a === 'poll_create' && ACT) {
+    const p = Object.assign({}, P0, { opts: (P0.opts || []).slice() }); let hit = false;
+    const L = ACT.lim(ctx);
+    if (/\banonym/.test(qn)) { p.anon = !/\b(pas|non|sans|plus)\b.{0,12}\banonym|\bnon anonym|\bpublic\b/.test(qn); hit = true; }
+    if (/\bchoix multiples?\b|plusieurs (?:choix|reponses)|\bmultiples?\b/.test(qn)) { p.multi = !/\b(pas|sans|non)\b/.test(qn); hit = true; }
+    if (/\bchoix unique\b|une seule reponse/.test(qn)) { p.multi = false; hit = true; }
+    if (/\boptions? (?:ouvertes?|libres?)\b|chacun peut (?:ajouter|proposer)|\bmembres peuvent (?:ajouter|proposer)/.test(qn)) { p.allow = true; hit = true; }
+    if ((m = /\b(\d{1,3})\s*(h|heures?|jours?|j)\b/.exec(qn))) { p.hours = Math.max(1, Math.min(L.pollMaxHours, parseInt(m[1], 10) * (m[2][0] === 'h' ? 1 : 24))); hit = true; }
+    if (/\bsans (?:duree|limite|date limite)\b/.test(qn)) { p.hours = null; hit = true; }
+    if (!hit && !REF.test(qn) && (x = g(/^(?:et |puis |aussi )?(?:ajoute|rajoute|ajouter|mets|met)\s+(?:aussi |encore )?(?:l'option |une option |l'idee |la reponse |les options? )?(.+)$/))) {
+      const add = ACT.splitOpts(x, L.optionLen).filter((o) => !p.opts.some((y) => y.toLowerCase() === o.toLowerCase()));
+      if (!add.length) return null;
+      if (p.opts.length + add.length > L.pollOptions) return { text: `Un sondage accepte au plus **${L.pollOptions} options** : retirez-en une d’abord (« enlève … »).`, acts: [d], topic: 'poll_create', chips: [] };
+      p.opts.push(...add); hit = true;
+    }
+    if (!hit && !REF.test(qn) && (x = g(/^(?:enleve|retire|supprime|efface)\s+(?:l'option\s+)?(.+)$/))) {
+      const f = ACT.findNamed(norm(x), p.opts.map((t) => ({ t })), (o) => o.t);
+      if (f.length !== 1) return null;
+      if (p.opts.length <= 2) return { text: 'Un sondage a besoin d’au moins **deux options**.', acts: [d], topic: 'poll_create', chips: [] };
+      p.opts = p.opts.filter((o) => o !== f[0].t); hit = true;
+    }
+    if (!hit && (x = g(/^(?:change|modifie|remplace|corrige)\s+la\s+question(?:\s+(?:en|par))?\s*:?\s*(.{3,300})$/))) { p.q = cap(x.replace(/[?.!\s]+$/, '')) + ' ?'; hit = true; }
+    if (!hit && !/\b(jours?|heures?)\b/.test(qn) && (x = g(DEST))) { const nd = newDest(x); if (nd) { p.conv = nd.id; hit = true; } }
+    if (!hit) return null;
+    return say(ACT.pollDraft(p, destFor(p.conv), ctx), '✏️ C’est modifié.');
+  }
+  if (d.a === 'list_create' && ACT) {
+    const p = Object.assign({}, P0, { items: (P0.items || []).slice() }); const L = ACT.lim(ctx); let hit = false;
+    if (!REF.test(qn) && (x = g(/^(?:et |puis |aussi )?(?:ajoute|rajoute|ajouter|mets|met|et)\s+(?:aussi |encore )?(.+)$/))) {
+      const add = ACT.splitItems(x, L).filter((o) => !p.items.some((y) => y.toLowerCase() === o.toLowerCase()));
+      if (!add.length) return null;
+      if (p.items.length + add.length > L.listItems) return { text: `Une liste accepte au plus **${L.listItems} éléments** à sa création.`, acts: [d], topic: 'todo_create', chips: [] };
+      p.items.push(...add); hit = true;
+    }
+    if (!hit && !REF.test(qn) && (x = g(/^(?:enleve|retire|supprime|efface)\s+(.+)$/))) {
+      const f = ACT.findNamed(norm(x), p.items.map((t) => ({ t })), (o) => o.t);
+      if (f.length !== 1) return null; p.items = p.items.filter((o) => o !== f[0].t); hit = true;
+    }
+    if (!hit && (x = g(/^(?:appelle(?:[- ]la)?|renomme(?:[- ]la)?(?: liste)?|change le titre|titre)\s*(?:en|par|:)?\s*(.{2,100})$/))) { p.title = cap(x.replace(/^[«"“]|[»"”.]$/g, '').replace(/^liste\s+/i, '')); hit = true; }
+    if (!hit && (x = g(DEST))) { const nd = newDest(x); if (nd) { p.conv = nd.id; hit = true; } }
+    if (!hit) return null;
+    return say(ACT.listDraft(p.title, p.items, destFor(p.conv)), '✏️ C’est modifié.');
+  }
+  if (d.a === 'send') {
+    const body = P0.t || '';
+    if ((x = g(/^(?:non[ ,]+)?(?:plutot|finalement|en fait|change(?: le message)?(?: en)?|dis plutot|ecris plutot)\s*[:,]?\s*(.{1,4000})$/)) && !/^(?:a|pour)\s/i.test(fold(x))) {
+      const r = sendPrep([convOf(ctx, P0.id) || { id: P0.id, name: P0.n }], P0.n, cap(x.replace(/^[«"“]\s*|\s*[»"”]$/g, '')), ctx); return say(r, '✏️ C’est modifié.');
+    }
+    if ((x = g(/^(?:et |aussi |pareil |non[ ,]+)?(?:plutot[ ,]+|finalement[ ,]+)?(?:envoie(?:-le)? |dis(?:-le)? |ecris(?:-le)? )?(?:aussi )?(?:a|pour)\s+(.{1,60}?)(?:\s+aussi)?\s*[?.!]*$/))) {
+      const found = findConvs(norm(x), ctx); if (!found.length) return null;
+      const swap = /\b(plutot|finalement|non|pas a)\b/.test(qn) && !/\b(et|aussi|pareil)\b/.test(qn);
+      const r = sendPrep(found, x, body, ctx);
+      if (!swap && r.acts && r.acts[0] && r.acts[0].a === 'send') r.acts = r.acts.concat([A('Envoyer à ' + P0.n, 'send', { id: P0.id, t: body, n: P0.n })]);
+      return say(r, swap ? '✏️ C’est modifié.' : '➕ Même message pour une autre personne :');
+    }
+  }
+  if (d.a === 'cal_ics' && CAL && /\b(plutot|finalement|en fait|change|decale|mets|met|non)\b/.test(qn) && /\b(\d{1,2}\s?h|\d{1,2}:\d{2}|demain|apres demain|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|\d{1,2} (?:janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre)|prochain|aujourd hui)/.test(qn)) {
+    const hasDay = /\b(demain|apres demain|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|\d{1,2} (?:janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre)|prochain|aujourd hui)\b/.test(qn);
+    const old = new Date(P0.s), mo = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+    const day = !hasDay && !isNaN(old) ? ` le ${old.getDate()} ${mo[old.getMonth()]} ${old.getFullYear()}` : '';
+    const r = CAL.reply('ajoute au calendrier ' + (P0.t || '') + day + ' ' + q.replace(/\b(plutôt|plutot|finalement|en fait|change|décale|decale|non|mets|met)\b/gi, ' '), ctx.now, {}, {});
+    if (r && r.acts && r.acts.length) { if (r.hint) { r.text += '\n' + r.hint; delete r.hint; } return say(r, '✏️ C’est modifié.'); }
+  }
+  return null;
+}
+
 const HANDLERS = [
+  // -1. suites du message précédent (brouillon à corriger)
+  followUp,
+  // 0a. actions de discussion (Talk2Piaf Actions) : sondages, listes, recherche dans la discussion, infos du groupe
+  (q, qn, qt, ctx, mem) => {
+    if (!ACT) return null;
+    const r = ACT.act(q, ctx, mem); if (!r) return null;
+    if (!ctx.conv && !r.acts.some((a) => a.a === 'poll_create' || a.a === 'list_create') && !/\b(sondages?|checklist|to ?do|liste (?:de|des) (?:courses|taches|cadeaux|choses))\b/.test(qn)) return null;
+    r.topic = topicId(r.topic); if (r.hint) { r.text += '\n' + r.hint; delete r.hint; }
+    return r;
+  },
+  // 0b. « mets le thème sombre », « passe en mode clair » : exécuté tout de suite, modifiable ou annulable
+  (q, qn, qt, ctx) => {
+    if (/^(comment|pourquoi|est ce|c est quoi|ou |qu est ce|a quoi)/.test(qn)) return null;
+    const named = /\b(theme|mode|apparence|affichage|ecran)\b/.test(qn), act = /\b(passe|mets|met|active|bascule|change|utilise|repasse|remets)\b/.test(qn);
+    const mode = /\b(sombre|dark)\b/.test(qn) || (named && /\b(noir|nuit|nocturne)\b/.test(qn)) ? 'dark' : /\b(clair|light)\b/.test(qn) || (named && /\b(jour|lumineux|blanc)\b/.test(qn)) ? 'light' : named && /\b(automatique|auto|systeme|appareil|defaut)\b/.test(qn) ? 'auto' : null;
+    if (!mode || !(named || act)) return null;
+    if (/\b(sondage|liste|message|discussion|groupe|photo)\b/.test(qn)) return null;
+    const label = { dark: 'sombre 🌙', light: 'clair ☀️', auto: 'automatique' }[mode];
+    return { text: `Je passe en thème **${label}**.`, acts: [AU('Thème ' + label.split(' ')[0], 'theme', { m: mode })], topic: 'theme', chips: [] };
+  },
   // 0. « ajoute au calendrier dentiste demain 14h » ; « suis https://github.com/… » (brouillon + boutons, rien n'est fait avant l'appui)
   (q, qn, qt, ctx, mem) => { const r = CAL ? CAL.reply(q, ctx.now, mem, {}) : null; if (r && r.hint) { r.text += '\n' + r.hint; delete r.hint; } return r; },
   (q, qn, qt, ctx, mem) => (WATCH ? WATCH.reply(q, { scope: 'self' }, mem) : null),
@@ -574,7 +717,7 @@ const HANDLERS = [
   (q, qn) => {
     if (!/suicid|me tuer|envie de mourir|veux mourir|veux plus vivre|en finir avec la vie|plus envie de vivre|me faire du mal|m automutil|me suicider|mettre fin a mes jours/.test(qn)) return null;
     return { text: 'Je suis vraiment désolé que vous traversiez cela, et je suis content que vous l’ayez écrit. Vous n’avez pas à rester seul avec cette souffrance. En France, le **3114** est le numéro national de prévention du suicide : gratuit, joignable **24 h/24 et 7 j/7**, avec des professionnels formés qui vous écouteront. Si vous êtes en danger immédiat, appelez le **15** ou le **112**. Et si vous le pouvez, parlez-en dès maintenant à un proche : je peux vous ouvrir vos discussions.',
-      links: [LK('3114 — numéro national de prévention du suicide', 'https://3114.fr/')], acts: [A('Voir mes discussions', 'go', { h: '#/' })], chips: [], topic: 'support' };
+      links: [LK('3114 — numéro national de prévention du suicide', 'https://3114.fr/')], acts: [], chips: [], topic: 'support' };
   },
   // 2. identifiant à 8 chiffres saisi : proposer de démarrer la discussion
   (q, qn, qt, ctx) => {
@@ -598,11 +741,23 @@ const HANDLERS = [
     if (!m.rest && OPEN_LEAD.test(lead)) return { text: m.found.length > 1 ? 'Plusieurs discussions correspondent — laquelle ?' : `Voici la discussion « ${m.found[0].name} » :`, acts: m.found.slice(0, 4).map((c) => A('Ouvrir ' + convLabel(c), 'conv', { id: c.id })), topic: 'conv_list', chips: [] };
     return null;
   },
+  // 3a. « préviens Marie que j'arrive », « demande à Marie de m'appeler », « réponds à Marie : ok »
+  (q, qn, qt, ctx) => {
+    const m = q.replace(/[’]/g, "'").match(/^\s*(?:previens|préviens|prevenir|prévenir|informe|informer|avertis|avertir|reponds|réponds|repondre|répondre|demande|demander)(?:[- ]moi)?\s+(?:à|a|au|aux)?\s*@?(.{1,60}?)\s*(?::|,\s*que\s|\sque\s|\squ'|\sde\s|\sd')\s*(.{1,4000})$/i);
+    if (!m) return null;
+    const ask = /^\s*(?:demande|demander)/i.test(q);
+    let body = m[2].trim().replace(/^[«"“]\s*|\s*[»"”]$/g, '').trim(); if (!body) return null;
+    if (!ask && /(?:\bque|\bqu['’])\s*$/i.test(q.slice(0, q.length - m[2].length))) body = body.replace(/\s*\?+$/, '');
+    if (ask || /\sd(?:e|')\s*$/i.test(q.slice(0, q.length - m[2].length))) body = 'Peux-tu ' + body.replace(/[?.!\s]+$/, '') + ' ?'; else body = cap(body);
+    const found = findConvs(norm(m[1]), ctx); if (!found.length && !(ctx.convs || []).length) return null;
+    return sendPrep(found, m[1].trim(), body, ctx);
+  },
   // 3. « écris à Marie : j'arrive » → message prêt à envoyer (bouton)
   (q, qn, qt, ctx) => {
     const m = q.match(/^\s*(?:peux[- ]tu\s+|pouvez[- ]vous\s+|tu peux\s+|vous pouvez\s+)?(?:envoie|envoi|envoyer|écris|ecris|écrire|ecrire|dis|dire|transmets|transmettre)(?:[- ]moi)?\s+(?:un message |le message |un mot |un texte )?(?:à|a|au|aux)\s+@?(.{1,60}?)\s*(?::|,\s*que\s|\sque\s|\sdisant\s|\spour dire\s|\squ’|\squ')\s*(.{1,4000})$/i);
     if (!m) return null;
     let body = m[2].trim().replace(/^[«"“]\s*|\s*[»"”]$/g, '').trim(); if (!body) return null;
+    if (/(?:\bque|\bqu['’]|pour dire|disant)\s*$/i.test(q.slice(0, q.length - m[2].length))) body = body.replace(/\s*\?+$/, ''); // « dis à Marie que je suis en retard ? » : ce n'est pas une question
     return sendPrep(findConvs(norm(m[1]), ctx), m[1].trim(), cap(body), ctx);
   },
   // 4. mes identifiant / nom / chiffres
@@ -667,8 +822,9 @@ const HANDLERS = [
       if (kind === 'arch') { const val = /desarchiv/.test(qn) ? false : off ? false : true; return A(val ? `Archiver ${c.name}` : `Désarchiver ${c.name}`, 'arch', { id: c.id, v: val, n: c.name }); }
       const val = /reactiv|desactiv/.test(qn) ? false : off ? false : true; return A(val ? `Mettre ${c.name} en silence` : `Réactiver ${c.name}`, 'mute', { id: c.id, v: val, n: c.name });
     };
-    const lead = found.length > 1 ? 'Plusieurs discussions correspondent — laquelle ?' : kind === 'open' ? `Voici la discussion « ${found[0].name} » :` : 'C’est prêt : appuyez sur le bouton pour confirmer.';
-    return { text: lead, acts: found.map(mk), topic: kind === 'open' ? 'conv_list' : kind === 'fav' ? 'favorites' : kind === 'arch' ? 'archive' : kind === 'mute' ? 'mute' : 'conv_list', chips: [] };
+    const direct = found.length === 1 && (kind === 'fav' || kind === 'arch' || kind === 'mute');
+    const lead = found.length > 1 ? 'Plusieurs discussions correspondent — laquelle ?' : kind === 'open' ? `Voici la discussion « ${found[0].name} » :` : direct ? 'C’est parti.' : 'C’est prêt : appuyez sur le bouton pour confirmer.';
+    return { text: lead, acts: found.map((c) => { const a = mk(c); return direct && /^(fav|arch|mute)$/.test(a.a) && !/ est déjà /.test(a.l) ? Object.assign(a, { auto: true }) : a; }), topic: kind === 'open' ? 'conv_list' : kind === 'fav' ? 'favorites' : kind === 'arch' ? 'archive' : kind === 'mute' ? 'mute' : 'conv_list', chips: [] };
   },
   // 7. date et heure
   (q, qn, qt, ctx) => {
@@ -741,6 +897,59 @@ const HANDLERS = [
   },
 ];
 
+// ------------------------------------------------------------------ compréhension : politesses, abréviations, fautes de frappe
+// minuscules sans accents, caractère par caractère : la longueur ne change pas, donc les positions valent aussi pour le texte d'origine
+const fold = (s) => Array.from(String(s), (ch) => (ch.length === 1 ? ch.normalize('NFD')[0].toLowerCase() : ch)).join('').replace(/[’`´]/g, "'");
+const OPEN = '(?:s[\' ]?il (?:te|vous) plait|stp|svp|please|pls|plz|salut|slt|bjr|bsr|cc|bonjour|bonsoir|hello|hey|coucou|ok|okay|bon|alors|donc|du coup|euh+|hum+|voila|bah|ben|oh|ah|tiens|dis[- ]moi|dites[- ]moi|' +
+  'est[- ]ce que (?:tu|vous|t) (?:peux|pouvez|pourrais|pourriez|veux|voulez) (?:bien |me |m\')?|(?:peux|pouvez|pourrais|pourriez)[- ](?:tu|vous|moi)[- ]?(?:bien |me |m\')?|(?:tu|vous|t) (?:peux|pouvez|pourrais|pourriez|veux bien|voulez bien) (?:bien |me |m\')?|(?:voudrais|voulez|veux)[- ](?:tu|vous) (?:bien |me |m\')?|' +
+  'serait[- ]il possible de |est[- ]il possible de |est[- ]ce possible de |y a t il moyen de |il y a moyen de |y a moyen de |' +
+  '(?:j ?(?:peux|peu|pourrais|pourrai) (?:bien )?(?:avoir|savoir|voir) |j(?:aimerais|voudrais|veux|souhaite) (?:bien )?(?=(?:creer|faire|ajouter|envoyer|ecrire|bloquer|mettre|changer|activer|ouvrir|chercher|cocher|supprimer|archiver|noter|programmer|rappeler|suivre|inviter|lancer|dire|prevenir|effacer)\\b))|(?:j|je) (?:aimerais|voudrais|souhaiterais|souhaite|veux|desire|ai envie de|ai besoin de|dois|vais) (?:bien )?(?:que (?:tu|vous) )?(?=(?:creer|faire|ajouter|envoyer|ecrire|ecris|bloquer|debloquer|mettre|changer|activer|desactiver|ouvrir|chercher|retrouver|cocher|supprimer|cloturer|fermer|archiver|noter|programmer|planifier|rappeler|suivre|partager|inviter|voir|savoir|connaitre|comprendre|utiliser|passer|appeler|contacter|parler|trouver|lancer|organiser|preparer|proposer|demander|dire|prevenir|informer|effacer|vider|regler)\\b))';
+const OPEN_RE = new RegExp('^(?:(?:' + OPEN + ')\\b[\\s,;:!.\\-]*)+');
+const TAIL_RE = /[\s,;!.?]*(?:s['\s]?il (?:te|vous) plait|stp|svp|please|pls|merci(?: d avance| d'avance| beaucoup| bien)?|thx|thanks)[\s!.?]*$/;
+const MENTION_RE = /^\s*@?\s*(?:talk\s*2\s*piaf|talk\s*to\s*piaf|t2p)\b[\s,:;!\-–]*/i;
+function strip(q, re, fromEnd) { // retire de q (texte d'origine) ce que re reconnaît dans sa version sans accents ; ne retire rien s'il resterait moins de 2 caractères utiles
+  const f = fold(q), m = re.exec(f); if (!m || !m[0]) return q;
+  const out = fromEnd ? q.slice(0, m.index) : q.slice(m[0].length);
+  return /[a-z0-9@]{2}/i.test(fold(out)) ? out.trim() : q;
+}
+const SMS = { qqun: 'quelqu un', qqn: 'quelqu un', qq1: 'quelqu un', bloker: 'bloquer', blokez: 'bloquez', jpeux: 'je peux', jveux: 'je veux', jsuis: 'je suis', chuis: 'je suis', ya: 'il y a', slt: 'salut', bjr: 'bonjour', bsr: 'bonsoir', cc: 'coucou', stp: '', svp: '', pls: '', plz: '', tkt: '', pk: 'pourquoi', pq: 'pourquoi', pkoi: 'pourquoi', pourkoi: 'pourquoi', cmt: 'comment', cmb: 'combien', qd: 'quand', tt: 'tout', tte: 'toute', ttes: 'toutes',
+  pr: 'pour', ds: 'dans', ac: 'avec', avc: 'avec', mnt: 'maintenant', mtn: 'maintenant', dsl: 'desole', mrc: 'merci', mci: 'merci', jsp: 'je sais pas', ojd: 'aujourd hui', ajd: 'aujourd hui', dem1: 'demain', bcp: 'beaucoup', msg: 'message', msgs: 'messages',
+  mess: 'message', grp: 'groupe', grps: 'groupes', conv: 'conversation', convs: 'conversations', notif: 'notification', notifs: 'notifications', mdp: 'mot de passe', tel: 'telephone', tlf: 'telephone', sms: 'message', texto: 'message', whatsapp: 'message',
+  kdo: 'cadeau', appli: 'application', app: 'application', param: 'parametres', params: 'parametres', parametre: 'parametres', ptit: 'petit', ptite: 'petite', oki: 'ok', dac: 'd accord', dacc: 'd accord', ouais: 'oui', ouaip: 'oui', yep: 'oui', yes: 'oui', nan: 'non', nope: 'non',
+  sdb: 'sondage', sond: 'sondage', chk: 'liste', cal: 'calendrier', rdv: 'rendez vous', rv: 'rendez vous', evt: 'evenement', evnmt: 'evenement', dispo: 'disponible', dispos: 'disponibles', bloq: 'bloque', fav: 'favori', favs: 'favoris', arch: 'archive' };
+const expandSms = (qn) => qn.replace(/\b([a-z])\1{2,}/g, '$1').split(' ').map((w) => (Object.prototype.hasOwnProperty.call(SMS, w) ? SMS[w] : w)).filter((w, i, a) => w !== '' || a.length === 1).join(' ').replace(/\s+/g, ' ').trim();
+// vocabulaire : tous les mots-clés des sujets, plus quelques verbes d'action ; sert à corriger une faute de frappe quand rien n'a été compris
+let VOCAB = null;
+const EXTRA_WORDS = ('envoie envoyer ecris ecrire previens prevenir bloque bloquer debloque debloquer sondage sondages liste listes calendrier agenda evenement rappelle rappeler cherche chercher recherche retrouve retrouver archive archiver favori favoris silence ' +
+  'notification notifications theme sombre clair message messages discussion discussions conversation groupe groupes membre membres epingle epingles photos videos cloture cloturer supprime supprimer efface effacer ajoute ajouter coche cocher decoche demain aujourd samedi dimanche ' +
+  'lundi mardi mercredi jeudi vendredi anonyme multiple options option question resultat resultats contact contacts identifiant parametres profil photo installer inviter compte code secret historique espace medias galerie vocal audio telephone').split(' ');
+function vocab() { if (!VOCAB) { VOCAB = new Set(EXTRA_WORDS); for (const t of TOPICS) for (const w of (t.raw || [])) VOCAB.add(w); } return VOCAB; }
+function near1(a, b) { // distance de Damerau-Levenshtein ≤ 1
+  if (a === b) return true; const la = a.length, lb = b.length; if (Math.abs(la - lb) > 1) return false;
+  let i = 0; while (i < la && i < lb && a[i] === b[i]) i++;
+  if (la === lb) return a.slice(i + 1) === b.slice(i + 1) || (a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2));
+  return la > lb ? a.slice(i + 1) === b.slice(i) : b.slice(i + 1) === a.slice(i);
+}
+function fixTypos(qn, ctx) { // ne s'applique qu'en dernier recours (quand la phrase telle quelle n'a pas été comprise) ; les noms de vos discussions ne sont jamais « corrigés »
+  const V = vocab(), names = new Set(); for (const c of (ctx && ctx.convs) || []) for (const w of norm(c.name).split(' ')) names.add(w);
+  let changed = false;
+  const out = qn.split(' ').map((w) => {
+    if (w.length < 5 || /\d/.test(w) || V.has(w) || names.has(w)) return w;
+    const c = []; for (const v of V) if (v.length >= 4 && near1(w, v)) c.push(v);
+    if (c.length >= 1 && (c.length === 1 || c.every((x) => x === c[0]))) { changed = true; return c[0]; }
+    if (c.length > 1) { const same = c.filter((x) => x[0] === w[0]); if (same.length === 1) { changed = true; return same[0]; } }
+    return w;
+  }).join(' ');
+  return changed ? out : qn;
+}
+function understand(text) {
+  let q = String(text || '').trim().slice(0, 600), called = false;
+  if (MENTION_RE.test(q)) { called = true; q = q.replace(MENTION_RE, '').trim(); }
+  q = strip(q, OPEN_RE, false);
+  if (!/[:«"“@]/.test(q)) q = strip(q, TAIL_RE, true);
+  return { q, qn: expandSms(norm(q)), called };
+}
+
 // ------------------------------------------------------------------ moteur
 const MIN_SCORE = 1.55;
 function scoreTopic(t, qn, qs) {
@@ -761,9 +970,9 @@ function scoreTopic(t, qn, qs) {
 const chipsOf = (ids) => ids.filter((i) => BY_ID[i]).map((i) => ({ l: BY_ID[i].q, t: BY_ID[i].q }));
 function starters() {
   return [
-    { l: 'Que peux-tu faire ?', t: 'Que peux-tu faire ?' }, { l: 'Mon identifiant', t: 'Quel est mon identifiant ?' }, { l: 'Créer un groupe', t: 'Comment créer un groupe ?' },
-    { l: 'Inviter un ami', t: 'Comment inviter un ami sur Piaf ?' }, { l: 'Installer Piaf', t: 'Comment installer Piaf sur mon téléphone ?' }, { l: 'Mes messages non lus', t: 'Mes messages non lus' },
-    { l: 'Sécuriser mon compte', t: 'Comment sécuriser mon compte ?' }, { l: 'Créer un sondage', t: 'Comment créer un sondage ?' }, { l: 'Libérer de l’espace', t: 'Comment libérer de l’espace de médias ?' }, { l: 'Une blague', t: 'Raconte-moi une blague' },
+    { l: 'Que peux-tu faire ?', t: 'Que peux-tu faire ?' }, { l: 'Écrire à quelqu’un', t: 'Comment envoyer un message avec Talk2Piaf ?' }, { l: 'Créer un sondage', t: 'Comment créer un sondage ?' }, { l: 'Ajouter à mon agenda', t: 'Comment ajouter un évènement à mon agenda ?' },
+    { l: 'Mon identifiant', t: 'Quel est mon identifiant ?' }, { l: 'Créer un groupe', t: 'Comment créer un groupe ?' }, { l: 'Inviter un ami', t: 'Comment inviter un ami sur Piaf ?' }, { l: 'Installer Piaf', t: 'Comment installer Piaf sur mon téléphone ?' },
+    { l: 'Mes messages non lus', t: 'Mes messages non lus' }, { l: 'Sécuriser mon compte', t: 'Comment sécuriser mon compte ?' }, { l: 'Libérer de l’espace', t: 'Comment libérer de l’espace de médias ?' }, { l: 'Une blague', t: 'Raconte-moi une blague' },
   ];
 }
 const searchLink = (q, ctx) => { const e = engineOf(ctx && ctx.search); return LK('Chercher avec ' + e.name, e.url.replace('%s', enc(q))); };
@@ -784,13 +993,12 @@ function answer(best, ctx, qn, q) {
   return finish(Object.assign({}, r, { acts, links: r.links || best.links || [], chipsFn: r.chips ? null : best.chipsFn, chips: r.chips }), best);
 }
 
-function reply(text, ctx, mem) {
-  const q = String(text || '').trim().slice(0, 600);
+function replyCore(q, ctx, mem, qnIn) {
   if (!q) return null;
-  ctx = ctx || {}; mem = mem || {};
-  if (!ctx.now) ctx.now = new Date();
+  if (!(ctx.now instanceof Date) || isNaN(ctx.now)) ctx.now = ctx.now ? new Date(ctx.now) : new Date();
+  if (isNaN(ctx.now)) ctx.now = new Date();
   if (ctx.first === undefined && ctx.name) ctx.first = String(ctx.name).split(/\s+/)[0];
-  const qn = norm(q), qs = stems(qn);
+  const qn = qnIn || norm(q), qs = stems(qn);
 
   // suites de conversation
   if (/^(oui|ok|okay|d accord|vas y|allez|volontiers|je veux bien|go|yes|bien sur|avec plaisir|oui merci|oui s il te plait|oui s il vous plait)$/.test(qn)) {
@@ -827,10 +1035,34 @@ function reply(text, ctx, mem) {
   const chips = near.length ? near.map((t) => ({ l: t.q, t: t.q })) : starters().slice(0, 4);
   const words = qs.length;
   return {
-    text: near.length ? 'Je ne suis pas certain d’avoir compris. Voulez-vous parler de l’un de ces sujets ? Vous pouvez aussi reformuler avec d’autres mots.'
-      : (words >= 2 ? 'Je n’ai pas de réponse fiable à cette question : mon domaine, c’est Piaf et quelques petits services du quotidien. Je peux en revanche vous orienter vers une source de recherche, ou vous proposer ce que je sais faire.' : 'Je n’ai pas bien compris. Pouvez-vous reformuler ? Voici quelques sujets sur lesquels je peux vous aider.'),
+    text: near.length ? 'Je ne suis pas certain d’avoir compris. Voulez-vous parler de l’un de ces sujets ? Vous pouvez aussi **reformuler** avec d’autres mots.'
+      : (words >= 2 ? 'Je n’ai pas de réponse fiable à cette question : mon domaine, c’est Piaf et quelques petits services du quotidien. Je peux en revanche vous orienter vers une source de recherche, ou vous proposer ce que je sais faire.' : 'Je n’ai pas bien compris. Pouvez-vous **reformuler** ? Par exemple : « écris à Marie : j’arrive », « crée un sondage : samedi ou dimanche ? », « mets le thème sombre ». Voici aussi quelques sujets sur lesquels je peux vous aider.'),
     links: words >= 2 && !near.length ? webLinks(q, ctx) : [], acts: [], chips: chips.slice(0, 4), topic: null, unknown: true,
   };
+}
+
+// Point d'entrée. `mem` ne garde que le message précédent : sujet, bouton proposé, brouillon d'action et date attendue.
+function reply(text, ctx, mem) {
+  ctx = ctx || {}; mem = mem || {};
+  if (!ctx.settings) ctx = Object.assign({}, ctx, { settings: {} });
+  const prevCal = mem.cal;
+  const u = understand(text);
+  let q = u.q, qn = u.qn;
+  if (!q && u.called) { q = 'Que peux-tu faire ?'; qn = norm(q); }
+  if (!q) return null;
+  let out = replyCore(q, ctx, mem, qn);
+  if (out && out.unknown) { // dernier recours : fautes de frappe
+    const qn2 = fixTypos(qn, ctx);
+    if (qn2 !== qn) { const out2 = replyCore(q, ctx, mem, qn2); if (out2 && !out2.unknown) out = out2; }
+  }
+  if (!out) return null;
+  out.topic = topicId(out.topic);
+  const a0 = out.acts && out.acts[0];
+  mem.topic = out.unknown ? null : (out.topic || null);
+  mem.offer = a0 || null;
+  mem.draft = a0 && DRAFTABLE.has(a0.a) ? a0 : null;
+  if (mem.cal && mem.cal === prevCal) mem.cal = null; // une date attendue ne vaut que pour le message suivant
+  return out;
 }
 
 // ------------------------------------------------------------------ phrase secrète (mots tirés au hasard, générés sur l'appareil)
@@ -845,6 +1077,6 @@ function passphrase(randInt) {
   return out.join('-') + '-' + String(10 + ri(90));
 }
 
-const api = { reply, ENGINES, engineOf, validEngineUrl, norm, stem, stems, TOPICS, BY_ID, starters, passphrase, WORDS, calc, findConvs, setRand(fn) { rand = fn || Math.random; } };
+const api = { topicId, reply, understand, fixTypos, ENGINES, engineOf, validEngineUrl, norm, stem, stems, TOPICS, BY_ID, starters, passphrase, WORDS, calc, findConvs, setRand(fn) { rand = fn || Math.random; } };
 if (typeof module === 'object' && module.exports) module.exports = api; else root.T2P = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -1,4 +1,4 @@
-/* Piaf — évènements de calendrier pour Talk2Piaf et Talk2Piaf Cowork.
+/* Piaf — évènements de calendrier pour Talk2Piaf (et Talk2Piaf Actions).
    Aucune dépendance, aucun réseau, aucun compte : le texte « dentiste demain à 14h » devient un brouillon d'évènement
    (titre, début, fin), puis un fichier .ics (Apple, Samsung, Outlook, Google… l'ouvrent d'un appui) ou un lien prérempli
    (Google Agenda, Outlook). L'évènement n'est enregistré que lorsque la personne valide dans son application de calendrier.
@@ -28,7 +28,7 @@ const hm = (h, m) => `${h}h${p2(m)}`;
 // ------------------------------------------------------------------ intention
 const VERB = /\b(?:ajoute|ajouter|ajoutes|ajoutez|mets|met|mettre|mettez|note|noter|notes|cree|creer|crees|creez|enregistre|enregistrer|planifie|planifier|programme|programmer|inscris|inscrire|bloque|bloquer|reserve|reserver)\b/;
 const CALWORD = /\b(?:calendrier|agenda|planning|evenement|event|rdv|rendez[- ]vous|reunion)\b/;
-const REMIND = /\brappelle(?:s|z)?[- ]moi\b/;
+const REMIND = /^rappeler\b|\brappelle(?:s|z|r)?[- ]moi\b|\bme rappel(?:ler|les|lez|le)\b|\b(?:cree|creer|ajoute|ajouter|mets|mettre|programme|programmer)\b.{0,15}\bun rappel\b/;
 const STARTS_EVENT = /^(?:rdv|rendez[- ]vous|reunion|evenement)\b/;
 // Une demande d'évènement : un verbe d'ajout + un mot de calendrier, ou « rappelle-moi », ou un texte qui commence par rdv / réunion.
 function intent(L) {
@@ -107,6 +107,7 @@ function parse(text, now) {
     /\b(?:(?:dans|sur|a|au|en|pour) (?:mon |ma |le |la |l'|notre )?)?(?:calendrier|agenda|planning)(?: (?:google|outlook|apple|iphone|samsung))?\b/,
     /\b(?:un |le |l')?(?:nouvel |nouveau )?(?:evenement|event)\b(?: suivant)?/,
     /\brappelle(?:s|z)?[- ]moi\b(?: (?:de |d'|que |qu'))?/,
+    /^rappeler\b(?: (?:de |d'|que |qu'))?/,
   ];
   if (lead) for (const re of LEADS) { let mm; const g = new RegExp(re.source, 'g'); while ((mm = g.exec(W))) { eat(mm); g.lastIndex = 0; } }
   let title = Array.from(q).map((c, i) => (mask[i] ? ' ' : c)).join('').replace(/\s+/g, ' ').trim();
@@ -185,8 +186,8 @@ function outlookUrl(p) {
 }
 const filename = (p) => (String(p.t || 'evenement').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'evenement') + '.ics';
 
-// ------------------------------------------------------------------ réponse du moteur (partagée par Talk2Piaf et Talk2Piaf Cowork)
-// Renvoie { text, hint, acts, topic, chips } ou null ; `hint` est la phrase qui accompagne les boutons (Cowork la montre à la seule personne qui appelle).
+// ------------------------------------------------------------------ réponse du moteur (utilisée par Talk2Piaf)
+// Renvoie { text, hint, acts, topic, chips } ou null ; `hint` est la phrase qui accompagne les boutons (ajoutée au texte de la réponse).
 // Renvoie null si le message n'est pas une demande d'évènement.
 // mem.cal garde 10 minutes le titre d'un évènement dont la date manque : « dentiste » puis « demain 14h » donnent un évènement complet.
 const A = (l, a, p) => ({ l, a, p: p || {} });

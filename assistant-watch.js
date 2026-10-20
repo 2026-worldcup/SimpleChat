@@ -1,4 +1,4 @@
-/* Piaf — suivi de fichiers pour Talk2Piaf et Talk2Piaf Cowork (côté appareil : comprendre la demande, préparer le bouton).
+/* Piaf — suivi de fichiers pour Talk2Piaf (côté appareil : comprendre la demande, préparer le bouton).
    Aucune dépendance, aucun réseau. Le suivi lui-même (vérification toutes les 15 minutes, alertes) est fait par le serveur
    (migration 010_watchers.sql et Edge Function `watch`) ; il ne démarre qu'à l'appui du bouton « Suivre ».
    Fournisseurs : GitHub (dépôts publics) disponible ; Google Drive / Microsoft OneDrive-SharePoint reconnus mais pas encore branchés.

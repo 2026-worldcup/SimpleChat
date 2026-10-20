@@ -146,7 +146,7 @@ input[type=text], input[type=password], input[type=search], input:not([type]), t
 .st.part { gap: 2px; align-items: center; } .st.part small { font-size: .7rem; }
 
 /* Talk2Piaf dans la liste et dans sa discussion */
-.avatar.t2p { background: #2a1710; } .avatar.t2c { background: #0e3a3a; } .conv-name .tag { display: inline-block; margin-left: 7px; padding: 1px 7px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-size: .68rem; font-weight: 700; vertical-align: 1px; letter-spacing: .01em; }
+.avatar.t2p { background: #2a1710; } .conv-name .tag { display: inline-block; margin-left: 7px; padding: 1px 7px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-size: .68rem; font-weight: 700; vertical-align: 1px; letter-spacing: .01em; }
 .t2p-extras { display: grid; gap: 6px; margin: 5px 0 2px 2px; max-width: min(92%, 560px); } .t2p-acts, .t2p-links, .t2p-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .t2p-act { min-height: 40px; padding: 0 15px; border-radius: 6px; border: 0; background: var(--accent); color: var(--accent-ink); font: inherit; font-weight: 600; font-size: .92rem; text-align: left; cursor: pointer; } .t2p-act:disabled { opacity: .6; cursor: default; } .t2p-act.done { background: var(--ok); color: #fff; opacity: 1; } .t2p-act.done::before { content: '✓ '; }
 .t2p-link { display: inline-flex; align-items: center; min-height: 38px; padding: 0 13px; border-radius: 6px; border: 1px solid var(--accent); color: var(--accent); text-decoration: none; font-weight: 600; font-size: .9rem; } .t2p-link::after { content: '↗'; margin-left: 6px; }
@@ -165,7 +165,20 @@ input[type=text], input[type=password], input[type=search], input:not([type]), t
 .mention-pop { display: flex; flex-direction: column; max-height: 232px; overflow-y: auto; padding: 4px 6px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .mention-item { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 8px; border: 0; background: transparent; border-radius: 10px; text-align: left; color: inherit; } .mention-item.on, .mention-item:active { background: var(--surface2); }
 .mention-name { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bubble.whisper { border-style: dashed; } .t2p-name { color: var(--accent, #c2410c); }
+.t2p-name { color: var(--accent, #c2410c); }
+/* Talk2Piaf dans une discussion : demande et réponse locales, style à part (pointillés), effaçables */
+.bubble.t2p-bubble { border-style: dashed; border-width: 1.5px; border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); background: color-mix(in srgb, var(--accent) 6%, var(--surface)); color: var(--ink); }
+.bubble.t2p-ask { border-radius: 16px 6px 16px 16px; background: transparent; } .bubble.t2p-say { border-radius: 6px 16px 16px 16px; }
+.bubble.t2p-bubble .sender { display: flex; align-items: center; gap: 6px; } .bubble.t2p-bubble .sender .avatar { margin: 0; }
+.t2p-extras.mine { margin: 5px 2px 2px auto; justify-content: flex-end; } .t2p-extras.mine .t2p-acts, .t2p-extras.mine .t2p-links { justify-content: flex-end; }
+.t2p-act.done { opacity: .5; }
+/* aperçus modifiables de Talk2Piaf Actions */
+.t2pa-edit { max-height: min(62vh, 560px); overflow-y: auto; padding: 2px 2px 0; } .t2pa-edit .field { margin-bottom: 12px; } .t2pa-edit textarea { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: inherit; resize: vertical; }
+.t2pa-edit input[type=text], .t2pa-edit input[type=datetime-local] { width: 100%; min-height: var(--tap); padding: 0 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: inherit; font: inherit; }
+.t2pa-edit select { margin-top: 0; } .t2pa-lbl { font-size: .85rem; color: var(--muted); font-weight: 600; }
+.t2pa-rows { display: grid; gap: 8px; } .t2pa-row { display: flex; gap: 6px; align-items: center; } .t2pa-row input { flex: 1; min-width: 0; }
+.t2pa-x { flex: none; width: 40px; min-height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font: inherit; cursor: pointer; }
+.modal-actions { flex-wrap: wrap; }
 
 .conv-top > *, .conv-bot > * { min-width: 0; } .conv-prev { display: block; min-width: 0; }
 
@@ -230,7 +243,8 @@ input[type=datetime-local] { width: 100%; min-height: var(--tap); padding: 8px 1
 
 .poll-foot .link-btn { white-space: nowrap; padding: 8px 4px; font-size: .9rem; }
 
-/* Talk2Piaf Cowork : réponse publique de l'assistant, filtres de recherche */
+/* Talk2Piaf : avatar dans les bulles, filtres de recherche */
 .t2p-name .avatar { vertical-align: -4px; margin-right: 6px; display: inline-flex; }
 .search-tags { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 0; } .search-tags[hidden] { display: none; }
 select { width: 100%; min-height: var(--tap); padding: 0 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: inherit; font: inherit; margin-top: 8px; }
+.card > select + .row-text, .card > .btn + .row-text { margin-top: 14px; }

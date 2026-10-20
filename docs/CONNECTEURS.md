@@ -17,7 +17,7 @@ Pourquoi « ajouter un évènement » n'écrit pas tout seul dans l'agenda : pou
 
 ## 2. Ce qui est livré
 
-### Calendrier (Talk2Piaf et Talk2Piaf Cowork)
+### Calendrier (Talk2Piaf)
 Exemples à écrire :
 - « ajoute au calendrier dentiste demain à 14h »
 - « mets dans l'agenda dîner chez Marie samedi 20h »
@@ -26,9 +26,9 @@ Exemples à écrire :
 - si la date manque : « ajoute au calendrier dentiste », puis l'assistant demande le jour, et vous répondez « demain 14h ».
 
 L'assistant prépare l'évènement (titre, jour, heure, durée 1 h par défaut, « toute la journée » sans heure) et propose trois boutons : **.ics** (téléchargement, à ouvrir pour l'ajouter), **Google Agenda**, **Outlook**. L'évènement n'est enregistré qu'après votre validation dans votre calendrier.
-Dans un groupe, Talk2Piaf Cowork publie l'évènement dans la discussion ; les boutons ne sont visibles que de la personne qui a appelé, et chacun peut demander la même chose pour son propre calendrier. Les heures sont comprises dans le fuseau horaire de l'appareil ; le fichier .ics est écrit en heure universelle, donc juste partout.
+Depuis une discussion (« @Talk2Piaf … »), la demande et la réponse restent sur l'appareil, et **rien n'est publié** dans la discussion. Un aperçu modifiable (titre, début, fin, lieu) précède l'ouverture du fichier ou du lien. Les heures sont comprises dans le fuseau horaire de l'appareil ; le fichier .ics est écrit en heure universelle, donc juste partout.
 
-### Suivi de fichiers GitHub (Talk2Piaf et Talk2Piaf Cowork)
+### Suivi de fichiers GitHub (Talk2Piaf)
 Exemples à écrire :
 - « suis https://github.com/propriétaire/dépôt/blob/main/README.md » (un fichier)
 - « suis https://github.com/propriétaire/dépôt/tree/main/docs » (un dossier)
@@ -36,8 +36,7 @@ Exemples à écrire :
 - « mes suivis » (liste, avec un bouton « Arrêter » par suivi)
 
 Le serveur vérifie environ **toutes les 15 minutes**. La première vérification sert de point de départ et ne dit rien. Ensuite :
-- **Talk2Piaf** (suivi personnel) : une alerte arrive dans la discussion Talk2Piaf (au démarrage de l'application, au retour au premier plan, ou toutes les 5 minutes quand elle est ouverte), avec une notification locale.
-- **Talk2Piaf Cowork** (suivi d'une discussion ou d'un groupe) : un message est publié dans la discussion, au nom de la personne qui a créé le suivi.
+- Le suivi est **personnel** (même s'il est demandé depuis une discussion) : une alerte arrive dans la discussion Talk2Piaf (au démarrage de l'application, au retour au premier plan, ou toutes les 5 minutes quand elle est ouverte), avec une notification locale. La fonction serveur `watch_add` sait encore publier dans une discussion (paramètre `p_conv`) mais l'application ne l'utilise plus : les réponses de l'assistant ne sont plus publiées.
 
 Limites : 10 suivis par personne, 5 par discussion ; dépôts publics seulement ; un suivi s'arrête tout seul après 3 vérifications ratées de suite (dépôt introuvable ou devenu privé) et la personne est prévenue ; les administrateurs d'un groupe peuvent arrêter tous les suivis du groupe.
 
@@ -86,11 +85,11 @@ Rien de ce qui suit n'est branché, et je n'ai pas pu le tester ici (il faut de 
 |---|---|
 | Analyse des dates, .ics, liens Google / Outlook, réponse partagée | `assistant-calendar.js` (module commun, testé sous Node) |
 | Adresses GitHub, réponses de suivi | `assistant-watch.js` (module commun) |
-| Branchement dans les moteurs | `HANDLERS` (premières entrées) et sujets `cal_howto`, `connect_status`, `watch_howto`, `watch_office` (+ variantes `_cw` pour Cowork) dans `assistant-kb.js` et `assistant-cowork-kb.js` |
-| Actions de boutons | `cal_ics`, `cal_google`, `cal_outlook`, `watch_add`, `watch_list`, `watch_stop` : `assistant.js` (Talk2Piaf) et `assistant-cowork.js` (Cowork) ; fonctions partagées `Piaf.calOpen` et `Piaf.watchOps` ; `coworkEnv()` doit fournir `isAdmin` |
+| Branchement dans les moteurs | `HANDLERS` (premières entrées) et sujets `cal_howto`, `connect_status`, `watch_howto`, `watch_office` dans `assistant-kb.js` |
+| Actions de boutons | `cal_ics`, `cal_google`, `cal_outlook`, `watch_add`, `watch_list`, `watch_stop` : `assistant.js` (appareil, suivi) et `assistant-actions.js` (aperçus modifiables : agenda) ; fonctions partagées `Piaf.calOpen` et `Piaf.watchOps` |
 | Alertes personnelles | `pullWatchEvents()` dans `assistant.js` (fonction serveur `my_watch_events`) |
 | Serveur | `supabase/migrations/010_watchers.sql`, `supabase/functions/watch/` (`lib.ts` : logique pure ; `index.ts` : appel par pg_cron) |
 | Erreurs lisibles | `too_many_watches` et `not_enabled` dans `app.js` (`not_enabled` = migration 010 pas encore appliquée) |
 
 Tests : `node tests/assistant-calendar.test.js`, `node tests/connectors-kb.test.js`, `node --experimental-strip-types tests/watch-lib.test.mjs` (avec `LIVE=1 LIVE_REPO=propriétaire/dépôt LIVE_PATH=README.md` pour interroger le vrai GitHub), plus les tests existants. La migration 010 a été vérifiée sur une base PostgreSQL 16 locale (51 contrôles : droits, limites, groupes, blocage, arrêt après 3 échecs, alertes remises une seule fois).
-Si un autre agent travaille sur Talk2Piaf Cowork : les nouveautés sont des entrées en tête de `HANDLERS` et des sujets ajoutés avant « Conversation courante » ; rien d'existant n'a été modifié, sauf une ligne dans `about_cowork` et dans `features`.
+Les connecteurs sont des entrées en tête de `HANDLERS` et des sujets de `assistant-kb.js`.

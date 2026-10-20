@@ -1,11 +1,11 @@
 // Tests des connecteurs dans les deux assistants (calendrier, suivi de fichiers) : `node tests/connectors-kb.test.js` (sans dépendance).
-const T = require('../assistant-kb.js'), W = require('../assistant-cowork-kb.js'), WT = require('../assistant-watch.js');
+const T = require('../assistant-kb.js'), WT = require('../assistant-watch.js');
 const NOW = new Date(2026, 9, 18, 18, 58);
 let fail = 0, n = 0;
 const ok = (c, m) => { n++; if (!c) { fail++; console.log('✗', m); } };
 const tctx = () => ({ name: 'Camille Durand', first: 'Camille', pid: '12345678', id8: '1234 5678', now: NOW, settings: {}, perm: 'default', online: true, rt: 'SUBSCRIBED', theme: 'auto', installable: false,
   convs: [{ id: 'c1', name: 'Marie Dupont', unread: 0, favorite: false, archived: false, muted: false, group: false, blocked: false, pid: '87654321' }] });
-const wctx = () => ({ name: 'Camille Durand', first: 'Camille', now: NOW, handle: '@Talk2Piaf Cowork',
+const wctx = () => ({ name: 'Camille Durand', first: 'Camille', now: NOW, 
   conv: { id: 'g1', name: 'Les Copains', group: true, pins: 0, me: { id: 'u1', name: 'Camille', role: 'admin' }, members: [{ id: 'u1', name: 'Camille Durand', role: 'admin' }, { id: 'u2', name: 'Marie Dupont', role: 'member' }], polls: [], lists: [] } });
 const acts = (r) => (r && r.acts ? r.acts.map((a) => a.a) : []);
 
@@ -51,28 +51,20 @@ for (const [q, topic] of [['rappelle-moi mon identifiant', 'profile_id'], ['je s
 }
 r = T.reply('écris à Marie : j’arrive demain à 14h', tctx(), {}); ok(r && acts(r)[0] === 'send', 'T2P : un message à Marie qui contient une date reste un message : ' + acts(r));
 
-// ---------------------------------------------------------------- Talk2Piaf Cowork (discussion)
-r = W.reply('@Talk2Piaf Cowork ajoute au calendrier dîner chez Marie samedi 20h', wctx(), {});
-ok(r && acts(r).join() === 'cal_ics,cal_google,cal_outlook' && r.topic === 'cal_howto_cw' && /samedi 24 octobre, de 20h00 à 21h00/.test(r.text) && !/validation/.test(r.text) && /visibles de vous seul/.test(r.hint), 'Cowork : évènement préparé : ' + (r && r.text));
-ok(r.acts[0].p.t === 'Dîner chez Marie' && r.acts[0].p.s === '2026-10-24T20:00:00', 'Cowork : charge utile du bouton');
-r = W.reply('@cowork suis https://github.com/octocat/Hello-World/blob/main/README', wctx(), {});
-ok(r && acts(r).join() === 'watch_add' && /publié dans cette discussion/.test(r.text) && r.topic === 'watch_howto_cw', 'Cowork : suivi de la discussion préparé : ' + (r && r.text.slice(0, 90)));
-r = W.reply('@cowork mes suivis', wctx(), {}); ok(r && acts(r)[0] === 'watch_list', 'Cowork : liste des suivis du groupe');
-r = W.reply('@cowork suis https://github.com/o/r', Object.assign(wctx(), { conv: null }), {}); ok(r && acts(r).indexOf('watch_add') === -1, 'Cowork : sans discussion ouverte, pas de suivi');
-r = W.reply('@cowork suis ce fichier https://onedrive.live.com/edit?id=1', wctx(), {}); ok(r && acts(r).length === 0 && /pas encore disponible/.test(r.text) && r.topic === 'watch_office_cw', 'Cowork : OneDrive : réponse honnête');
-for (const [q, id] of [['Comment ajouter un évènement du groupe à mon agenda ?', 'cal_howto_cw'], ['Talk2Piaf Cowork peut-il se connecter à nos agendas et à nos documents ?', 'connect_status_cw'], ['Comment suivre les modifications d’un fichier dans ce groupe ?', 'watch_howto_cw'], ['Peut-on suivre un document Word, Excel ou Google Docs dans ce groupe ?', 'watch_office_cw']]) {
-  const rr = W.reply(q, wctx(), {}); ok(rr && rr.topic === id && rr.chips.length > 0, 'Cowork : sujet ' + id);
-}
-for (const [q, id] of [['on peut synchroniser nos agendas ?', 'connect_status_cw'], ['suivre un fichier github', 'watch_howto_cw'], ['suivre un fichier excel', 'watch_office_cw']]) {
-  const rr = W.reply(q, wctx(), {}); ok(rr && rr.topic === id, `Cowork : « ${q} » → ${id} (obtenu ${rr && rr.topic})`);
-}
+// ---------------------------------------------------------------- Talk2Piaf dans une discussion (contexte de groupe)
+r = T.reply('@Talk2Piaf ajoute au calendrier dîner chez Marie samedi 20h', Object.assign(tctx(), wctx()), {});
+ok(r && acts(r).join() === 'cal_ics,cal_google,cal_outlook' && r.topic === 'cal_howto' && /samedi 24 octobre, de 20h00 à 21h00/.test(r.text), 'groupe : évènement préparé : ' + (r && r.text));
+ok(r.acts[0].p.t === 'Dîner chez Marie' && r.acts[0].p.s === '2026-10-24T20:00:00', 'groupe : charge utile du bouton');
+r = T.reply('@talk2piaf suis https://github.com/octocat/Hello-World/blob/main/README', Object.assign(tctx(), wctx()), {});
+ok(r && acts(r).join() === 'watch_add' && r.topic === 'watch_howto' && r.acts[0].p.conv == null, 'groupe : le suivi reste personnel (pas de conv) : ' + (r && JSON.stringify(r.acts[0].p)));
+r = T.reply('@talk2piaf mes suivis', Object.assign(tctx(), wctx()), {}); ok(r && acts(r)[0] === 'watch_list', 'groupe : liste des suivis');
+r = T.reply('@talk2piaf suis ce fichier https://onedrive.live.com/edit?id=1', Object.assign(tctx(), wctx()), {}); ok(r && acts(r).length === 0 && /pas encore disponible/.test(r.text) && r.topic === 'watch_office', 'groupe : OneDrive : réponse honnête');
 for (const q of ['crée un sondage : samedi ou dimanche ?', 'crée une liste de courses : lait, pain', 'qui est administrateur ?', 'mets le thème sombre']) {
-  const rr = W.reply('@cowork ' + q, wctx(), {}); ok(rr && !acts(rr).some((a) => /^(cal_|watch_)/.test(a)), `Cowork : « ${q} » n’est pas détourné`);
+  const rr = T.reply('@talk2piaf ' + q, Object.assign(tctx(), wctx()), {}); ok(rr && !acts(rr).some((a) => /^(cal_|watch_)/.test(a)), `groupe : « ${q} » n’est pas détourné`);
 }
-// pas de collision d'identifiants entre les deux moteurs ; les réponses ne contiennent ni HTML ni mot interdit
-for (const t of W.TOPICS) ok(!T.BY_ID[t.id], 'identifiant commun : ' + t.id);
+// les réponses ne contiennent ni HTML ni mot interdit
 const banned = new RegExp('simul' + '[ée]', 'i'); let all = '';
-for (const t of [...T.TOPICS.filter((x) => /^(cal_|connect_|watch_)/.test(x.id)).map((x) => T.reply(x.q, tctx(), {})), ...W.TOPICS.filter((x) => /(cal_|connect_|watch_)/.test(x.id)).map((x) => W.reply(x.q, wctx(), {}))]) all += t.text + ' ';
+for (const t of T.TOPICS.filter((x) => /^(cal_|connect_|watch_)/.test(x.id)).map((x) => T.reply(x.q, tctx(), {}))) all += t.text + ' ';
 ok(!banned.test(all) && !/<[a-z]/i.test(all), 'pas de HTML ni de mot interdit');
 
 console.log(`${n} contrôles, ${fail} échec(s)`);
