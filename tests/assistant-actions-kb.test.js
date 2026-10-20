@@ -1,10 +1,11 @@
-// Tests du moteur Talk2Piaf Cowork : `node tests/assistant-cowork-kb.test.js` (sans dépendance).
+// Tests de Talk2Piaf Actions (sondages, listes, recherche, infos du groupe) via le moteur unifié : `node tests/assistant-actions-kb.test.js`.
 // Si le dépôt SimpleChat est disponible (variable T2P_KB_PATH ou chemin par défaut), on vérifie aussi que
 // chaque demande confiée à Talk2Piaf trouve bien une réponse chez lui (jamais « inconnu »).
-const W = require('../assistant-cowork-kb.js');
+const W = require('../assistant-kb.js');
+const A = require('../assistant-actions-kb.js');
 const fs = require('fs');
 const NOW = new Date('2026-10-18T09:30:00'); // dimanche
-const ctx = (over) => Object.assign({ name: 'Camille Durand', first: 'Camille', now: NOW, handle: '@Talk2Piaf Cowork',
+const ctx = (over) => Object.assign({ name: 'Camille Durand', first: 'Camille', now: NOW, handle: '@Talk2Piaf',
   conv: { id: 'g1', name: 'Les Copains', group: true, pins: 2, me: { id: 'u1', name: 'Camille', role: 'admin' },
     members: [{ id: 'u1', name: 'Camille Durand', role: 'admin' }, { id: 'u2', name: 'Marie Dupont', role: 'member' }, { id: 'u3', name: 'Marc Leroy', role: 'member' }, { id: 'u4', name: 'Sophie Martin', role: 'member' }],
     polls: [{ id: 'p1', mid: 'm1', question: 'Quel jour pour le dîner ?', open: true, mine: true, total: 5, votes: [{ t: 'Samedi', n: 3 }, { t: 'Dimanche', n: 2 }] },
@@ -18,7 +19,7 @@ let fail = 0, n = 0;
 const ok = (cond, msg) => { n++; if (!cond) { fail++; console.log('✗', msg); } };
 const exp = (q, topic, chk, c, mem) => {
   const r = W.reply(q, c || ctx(), mem || {});
-  const good = r && (topic === null ? r.unknown : r.topic === topic) && (!chk || chk(r));
+  const good = r && (topic === null ? r.unknown : r.topic === W.topicId(topic)) && (!chk || chk(r));
   n++; if (!good) { fail++; console.log('✗', JSON.stringify(q), '→', r && r.topic, r && r.unknown ? '(inconnu)' : '', '| attendu', topic, '|', r && r.text.slice(0, 90), r && r.acts.map((a) => a.a + JSON.stringify(a.p)).join(' ').slice(0, 160)); }
   return r;
 };
@@ -26,15 +27,15 @@ const act = (r, name) => r.acts.find((a) => a.a === name);
 
 // ---------------------------------------------------------------- sujets (questions d'usage)
 const topics = [
-  ['que peux-tu faire ?', 'about_cowork'], ['à quoi tu sers', 'about_cowork'], ['quelle différence avec Talk2Piaf', 'cowork_vs_t2p'], ['comment t’appeler', 'how_call'], ['qui voit mes demandes', 'cowork_privacy'],
-  ['qui t’a créé ?', 'who_made_w'], ['es-tu un robot ?', 'are_you_ai_w'],
+  ['que peux-tu faire ?', 'what_can_you_do'], ['à quoi tu sers', 'what_can_you_do'], ['comment t’appeler', 't2p_call'], ['qui voit mes demandes', 'assistant_privacy'],
+  ['qui t’a créé ?', 'who_made'], ['es-tu un robot ?', 'are_you_ai'],
   ['comment créer un sondage', 'poll_howto'], ['combien d’options dans un sondage', 'poll_options'], ['un sondage anonyme est possible ?', 'poll_anonymous'], ['peut-on voter pour plusieurs réponses', 'poll_multi'],
   ['limiter la durée du sondage', 'poll_duration'], ['comment clôturer un sondage', 'poll_close_howto'], ['comment voir les résultats d’un sondage', 'poll_results_howto'], ['qui peut créer un sondage', 'poll_who'], ['idées de sondages', 'poll_ideas'],
   ['comment créer une liste collaborative', 'list_howto'], ['comment répartir les tâches', 'list_assign_howto'], ['comment cocher un élément', 'list_check_howto'], ['comment terminer une liste', 'list_close_howto'], ['combien d’éléments dans une liste', 'list_limits'], ['idées de listes', 'list_ideas'],
   ['comment chercher dans la conversation', 'search_howto'], ['quels filtres pour la recherche', 'search_filters'], ['où sont les messages épinglés', 'pins_howto'], ['où voir les photos du groupe', 'gallery_group'],
   ['comment mentionner quelqu’un', 'mention_howto'], ['comment ajouter un membre au groupe', 'members_howto'], ['différence administrateur membre', 'grp_roles'], ['changer le nom du groupe', 'grp_identity'],
   ['un nouveau membre voit l’historique ?', 'grp_history'], ['qui a lu mon message dans le groupe', 'grp_read'], ['comment quitter le groupe', 'grp_leave'], ['supprimer le groupe', 'grp_delete'],
-  ['quota de médias du groupe', 'media_quota'], ['combien de personnes dans un groupe', 'group_size'], ['bonjour', 'greeting_w'], ['merci beaucoup', 'thanks_w'], ['au revoir', 'bye_w'],
+  ['quota de médias du groupe', 'media_quota'], ['combien de personnes dans un groupe', 'group_limits'], ['bonjour', 'greeting'], ['merci beaucoup', 'thanks'], ['au revoir', 'bye'],
 ];
 for (const [q, t] of topics) exp(q, t);
 
@@ -42,7 +43,7 @@ for (const [q, t] of topics) exp(q, t);
 let r = exp('Crée un sondage : Quel jour pour le dîner ? samedi, dimanche, lundi', 'poll_howto', (r) => act(r, 'poll_create'));
 let p = act(r, 'poll_create').p;
 ok(p.q === 'Quel jour pour le dîner ?' && p.opts.join('|') === 'Samedi|Dimanche|Lundi' && p.multi === false && p.anon === false && p.hours === null && p.conv === 'g1', 'poll: champs ' + JSON.stringify(p));
-ok(/rien n’est créé avant/.test(r.hint || ''), 'poll: aperçu sans publication (hint)'); ok(p.allow === false, 'poll: allow par défaut');
+ok(/bouton/.test(r.text + (r.hint || '')), 'poll: aperçu sans publication'); ok(p.allow === false, 'poll: allow par défaut');
 r = exp('sondage pizza ou sushi ou burger', 'poll_howto', (r) => act(r, 'poll_create').p.opts.length === 3); ok(act(r, 'poll_create').p.opts.join('|') === 'Pizza|Sushi|Burger', 'poll: « ou » → options');
 r = exp('crée un sondage anonyme à choix multiples de 48 h : Quelles activités ? ski, randonnée, spa', 'poll_howto', (r) => { const x = act(r, 'poll_create').p; return x.anon && x.multi && x.hours === 48 && x.opts.length === 3; });
 r = exp('fais un sondage pour savoir qui vient samedi', 'poll_howto', (r) => act(r, 'poll_create').p.opts.join('|') === 'Oui|Non|Peut-être'); ok(act(r, 'poll_create').p.q === 'Qui vient samedi ?', 'poll: question « pour savoir »');
@@ -56,13 +57,13 @@ r = exp('crée un sondage : Choix ? a, b, c, d, e, f, g, h, i, j, k, l, m', 'pol
 r = exp('crée un sondage : Choix ? a, b, c, d, e, f, g, h, i, j, k, l', 'poll_howto', (r) => act(r, 'poll_create').p.opts.length === 12);
 r = exp('crée un sondage : Quoi ? seul', 'poll_howto', (r) => !act(r, 'poll_create'));
 r = exp('crée un sondage : Jour ? lundi, lundi, Lundi, mardi', 'poll_howto', (r) => act(r, 'poll_create').p.opts.join('|') === 'Lundi|Mardi');
-exp('Crée un sondage : Quel jour ? samedi, dimanche', 'poll_howto', (r) => !act(r, 'poll_create'), noConvCtx());
+exp('Crée un sondage : Quel jour ? samedi, dimanche', 'poll_howto', (r) => act(r, 'poll_create') && act(r, 'poll_create').p.conv === null, noConvCtx());
 exp('crée un sondage : Quel jour ? samedi, dimanche', 'poll_who', (r) => !act(r, 'poll_create') && /administrateurs/.test(r.text), Object.assign(memberCtx(), { perms: { poll: 'admin' } }));
 exp('crée un sondage : Quel jour ? samedi, dimanche', 'poll_howto', (r) => act(r, 'poll_create'), memberCtx());
 r = exp('crée un sondage avec options ouvertes : Où manger ? chez Paul, au bistrot', 'poll_howto', (r) => act(r, 'poll_create').p.allow === true);
 // sondages : clôture, réouverture, suppression, résultats
 r = exp('clôture le sondage', 'poll_close_howto', (r) => r.acts.length === 2 && r.acts.every((a) => a.a === 'poll_close' && a.p.closed === true && a.p.mid));
-r = exp('ferme le sondage du dîner', 'poll_close_howto', (r) => r.acts.length === 1 && r.acts[0].p.id === 'p1' && /rien n’est modifié/.test(r.hint));
+r = exp('ferme le sondage du dîner', 'poll_close_howto', (r) => r.acts.length === 1 && r.acts[0].p.id === 'p1' && /rien n’est modifié/.test(r.text));
 r = exp('clôture le sondage', 'poll_close_howto', (r) => r.acts.length === 1 && r.acts[0].p.id === 'p1', memberCtx());
 exp('clôture le sondage', 'poll_close_howto', (r) => /aucun sondage/.test(r.text), ctx({ conv: Object.assign({}, ctx().conv, { polls: [] }) }));
 const closedCtx = () => { const c = ctx(); c.conv = Object.assign({}, c.conv, { polls: [Object.assign({}, c.conv.polls[0], { open: false })] }); return c; };
@@ -80,7 +81,7 @@ r = exp('crée une liste cadeaux : un livre et du chocolat', 'list_howto', (r) =
 r = exp('nouvelle liste : boissons, chips', 'list_howto', (r) => act(r, 'list_create').p.title === 'Liste' && act(r, 'list_create').p.items.length === 2);
 r = exp('crée une liste à apporter', 'list_howto', (r) => act(r, 'list_create').p.items.length === 0 && /^À apporter$|^A apporter$/i.test(act(r, 'list_create').p.title));
 r = exp('crée une liste', 'list_howto', (r) => !act(r, 'list_create'));
-exp('crée une liste de courses : lait', 'list_howto', (r) => !act(r, 'list_create'), noConvCtx());
+exp('crée une liste de courses : lait', 'list_howto', (r) => act(r, 'list_create') && act(r, 'list_create').p.conv === null, noConvCtx());
 r = exp('ajoute du fromage à la liste de courses', 'list_howto', (r) => act(r, 'list_add')); ok(act(r, 'list_add').p.list === 'l1' && act(r, 'list_add').p.items[0].t === 'Fromage', 'liste: ajout');
 r = exp('ajoute du pain', 'list_howto', (r) => r.acts.length === 2 && r.acts.every((a) => a.a === 'list_add'));
 r = exp('ajoute du pain', 'list_howto', (r) => r.acts.length === 1 && r.acts[0].p.list === 'l1', oneList());
@@ -128,27 +129,19 @@ exp('comment retrouver un vieux message', 'search_howto', (r) => !act(r, 'search
 
 // ---------------------------------------------------------------- infos du groupe
 exp('qui est administrateur ?', 'grp_roles', (r) => /Camille Durand/.test(r.text));
-exp('qui est dans le groupe ?', 'group_size', (r) => /4 membres/.test(r.text) && /Marie Dupont/.test(r.text));
-exp('combien de membres dans le groupe', 'group_size', (r) => /4 membres/.test(r.text));
+exp('qui est dans le groupe ?', 'groups_intro', (r) => /4 membres/.test(r.text) && /Marie Dupont/.test(r.text));
+exp('combien de membres dans le groupe', 'groups_intro', (r) => /4 membres/.test(r.text));
 exp('suis-je admin ?', 'grp_roles', (r) => /administrateur/.test(r.text));
 exp('suis-je admin ?', 'grp_roles', (r) => /membre/.test(r.text) && !/Vous êtes \*\*administrateur/.test(r.text), memberCtx());
 
-// ---------------------------------------------------------------- hand-off vers Talk2Piaf (appareil)
-const device = ['mets le groupe en silence', 'passe en mode sombre', 'écris à Marie : j’arrive', 'bloque Marc', 'mets ce groupe en favori', 'archive la discussion', 'active les notifications', 'change ma photo de profil', 'comment installer Piaf', 'raconte-moi une blague',
-  'calcule 12 x 7', 'quelle heure est-il', 'j’ai oublié mon code secret', 'les messages sont chiffrés ?', 'efface l’historique', 'comment me déconnecter ?', 'renomme la discussion', 'envoie à Maman que je rentre tard'];
-const handoffs = [];
-for (const q of device) { const r = exp(q, 'handoff', (r) => r.handoff && r.acts.length === 1 && r.acts[0].a === 't2p' && r.acts[0].p.q === q && /Talk2Piaf/.test(r.text)); handoffs.push(q); }
-// ces demandes de groupe ne doivent PAS être confiées à Talk2Piaf
-for (const q of ['qui a lu mon message dans le groupe', 'supprimer le groupe', 'quitter le groupe', 'ajouter un membre au groupe']) { const r = W.reply(q, ctx(), {}); ok(!r.handoff, 'ne doit pas passer à Talk2Piaf : ' + q); }
-// inconnu
-r = exp('le jaguar est-il un félin ?', null, (r) => r.acts[0] && r.acts[0].a === 't2p');
+// ---------------------------------------------------------------- demandes qui restent au moteur principal
+for (const q of ['qui a lu mon message dans le groupe', 'supprimer le groupe', 'quitter le groupe', 'ajouter un membre au groupe']) { const r = W.reply(q, ctx(), {}); ok(r && !r.unknown && !r.acts.some((x) => x.a === 'poll_create'), 'réponse : ' + q); }
+r = exp('le jaguar est-il un félin ?', null);
 r = W.reply('xyzzy', ctx(), {}); ok(r.unknown && !r.acts.length, 'inconnu court');
-// appel par mention : « @work … »
-r = exp('@cowork cherche restaurant dans la conversation', 'search_howto', (r) => act(r, 'search').p.q === 'restaurant');
-r = exp('@cowork, crée une liste de courses : lait, pain', 'list_howto', (r) => act(r, 'list_create').p.title === 'Courses');
-r = exp('@cowork', 'about_cowork');
-r = exp('@Talk2Piaf Cowork cherche restaurant dans la conversation', 'search_howto', (r) => act(r, 'search').p.q === 'restaurant');
-r = exp('@talk2piaf-cowork crée un sondage : Quel jour ? lundi, mardi', 'poll_howto', (r) => act(r, 'poll_create').p.opts.length === 2);
+// appel par mention : « @Talk2Piaf … »
+r = exp('@Talk2Piaf cherche restaurant dans la conversation', 'search_howto', (r) => act(r, 'search').p.q === 'restaurant');
+r = exp('@talk2piaf, crée une liste de courses : lait, pain', 'list_howto', (r) => act(r, 'list_create').p.title === 'Courses');
+r = exp('@talk2piaf crée un sondage : Quel jour ? lundi, mardi', 'poll_howto', (r) => act(r, 'poll_create').p.opts.length === 2);
 ok(W.reply('', ctx(), {}) === null, 'vide → null');
 // robustesse : « now » absent, invalide ou sérialisé
 for (const now of [undefined, 'pas une date', '2026-10-18T09:30:00', null]) { const rr = W.reply('les photos d’hier', ctx({ now }), {}); ok(rr && act(rr, 'search') && act(rr, 'search').p.since, 'now = ' + now); }
@@ -157,11 +150,9 @@ exp('je veux mourir', 'support', (r) => /3114/.test(r.text) && r.chips.length ==
 // continuations
 r = W.reply('crée un sondage : Jour ? lundi, mardi', ctx(), {}); const mem = { topic: r.topic, offer: r.acts[0] };
 r = W.reply('oui', ctx(), mem); ok(r.acts[0] && r.acts[0].a === 'poll_create', 'oui → bouton');
-r = W.reply('non merci', ctx(), mem); ok(/rien n’est publié/.test(r.text) && !r.acts.length, 'non → rien');
-// les réponses de Cowork sont publiques (sauvegardées dans le cloud) ; seuls les boutons restent privés
-ok(W.reply('bonjour', ctx(), {}).scope === 'group' && W.reply('crée un sondage : A ? x, y', ctx(), {}).scope === 'group', 'scope = group');
-ok(/rien n’est créé avant/.test(W.reply('crée une liste de courses : lait', ctx(), {}).hint), 'hint de création');
-// jamais de brouillon publié sans bouton : aucune action n'a de champ « auto »
+r = W.reply('non merci', ctx(), mem); ok(/rien n’est (publié|créé|modifié|envoyé)|d’accord|très bien|pas de souci|annul/i.test(r.text) && !r.acts.length, 'non → rien : ' + r.text);
+ok(/bouton/.test(W.reply('crée une liste de courses : lait', ctx(), {}).text), 'texte de création');
+// les brouillons de création ne sont jamais exécutés seuls
 for (const q of ['crée un sondage : A ? x, y', 'coche le pain', 'cherche budget dans la conversation']) ok(W.reply(q, ctx(), {}).acts.every((a) => !('auto' in a.p)), 'pas d’auto');
 
 // ---------------------------------------------------------------- puces et cohérence
@@ -177,7 +168,7 @@ ok(new Set(W.TOPICS.map((t) => t.id)).size === W.TOPICS.length, 'ids dupliqués'
 // limites configurables
 r = W.reply('combien d’options dans un sondage', ctx({ limits: { pollOptions: 6 } }), {}); ok(/2 à 6 options/.test(r.text), 'limites du contexte');
 // le mot interdit ne doit apparaître nulle part dans les réponses ni dans le code
-const src = fs.readFileSync(__dirname + '/../assistant-cowork-kb.js', 'utf8');
+const src = fs.readFileSync(__dirname + '/../assistant-actions-kb.js', 'utf8');
 const banned = new RegExp('simul' + '[ée]', 'i');
 ok(!banned.test(src), 'mot interdit dans le code');
 let allText = ''; for (const t of W.TOPICS) { const rr = W.reply(t.q, ctx(), {}); allText += rr.text + ' ' + rr.chips.map((c) => c.l).join(' ') + ' '; }
@@ -185,18 +176,5 @@ ok(!banned.test(allText), 'mot interdit dans les réponses');
 // les réponses ne contiennent jamais de HTML
 ok(!/<[a-z]/i.test(allText), 'pas de HTML');
 
-// ---------------------------------------------------------------- recoupement avec Talk2Piaf (si disponible)
-const kbPath = process.env.T2P_KB_PATH || __dirname + '/../assistant-kb.js';
-let cross = 0;
-if (fs.existsSync(kbPath)) {
-  const T = require(kbPath);
-  const tctx = { name: 'Camille Durand', first: 'Camille', pid: '12345678', id8: '1234 5678', now: NOW, settings: {}, perm: 'default', online: true, rt: 'SUBSCRIBED', theme: 'auto', installable: false, standalone: false,
-    convs: [{ id: 'c1', name: 'Marie Dupont', unread: 0, favorite: false, archived: false, muted: false, group: false, blocked: false, pid: '87654321' }, { id: 'g1', name: 'Les Copains', unread: 0, favorite: false, archived: false, muted: false, group: true, blocked: false, pid: null },
-      { id: 'c3', name: 'Marc Leroy', unread: 0, favorite: false, archived: false, muted: false, group: false, blocked: false, pid: '33334444' }, { id: 'c4', name: 'Maman', unread: 0, favorite: false, archived: false, muted: false, group: false, blocked: false, pid: '11112222' }] };
-  for (const q of handoffs) { const tr = T.reply(q, tctx, {}); cross++; if (!tr || tr.unknown) { fail++; console.log('✗ Talk2Piaf ne sait pas répondre à la demande confiée :', JSON.stringify(q)); } }
-  // Talk2Piaf ne doit pas, de son côté, être le seul à connaître les sujets de groupe : on vérifie juste qu'il n'y a pas de collision d'identifiants avec le moteur Cowork
-  for (const t of W.TOPICS) if (T.BY_ID[t.id]) { fail++; console.log('✗ identifiant de sujet commun avec Talk2Piaf :', t.id); }
-} else console.log('(recoupement avec Talk2Piaf ignoré : assistant-kb.js introuvable)');
-
-console.log(`${W.TOPICS.length} sujets, ${chipsTested} puces vérifiées, ${handoffs.length} hand-offs (${cross} recoupés avec Talk2Piaf), ${n} contrôles, ${fail} échec(s)`);
+console.log(`${W.TOPICS.length} sujets, ${chipsTested} puces vérifiées, ${n} contrôles, ${fail} échec(s)`);
 process.exit(fail ? 1 : 0);

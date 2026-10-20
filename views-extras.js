@@ -37,7 +37,7 @@ const rerender = (ctx) => ctx.rerender();
 const ownerOf = (x, ctx) => x.creator_id === S.me.id || ctx.isAdmin();
 const fail = (e) => toast(errText(e), { error: true });
 
-// État des sondages et des listes d'une discussion, au format attendu par Talk2Piaf Cowork (assistant-cowork-kb.js) : lecture seule.
+// État des sondages et des listes d'une discussion, au format attendu par Talk2Piaf Actions (assistant-actions-kb.js) : lecture seule.
 // o = { isAdmin: bool, nameOf(id), dead(messageId) } ; les sondages et listes dont le message est supprimé sont ignorés.
 ext.snapshot = (cid, o = {}) => {
   const s = stores.get(cid), out = { polls: [], lists: [] }; if (!s) return out;

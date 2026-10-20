@@ -1,9 +1,9 @@
-/* Talk2Piaf — assistant intégré à Piaf, présent dans la liste des discussions.
-   Le moteur de réponse (assistant-kb.js) tourne sur l'appareil : rien de ce qui est écrit ici n'est envoyé à un serveur.
+/* Talk2Piaf — assistant intégré à Piaf, présent dans la liste des discussions et appelable partout par « @Talk2Piaf ».
+   Le moteur de réponse (assistant-kb.js, avec Talk2Piaf Actions : assistant-actions-kb.js) tourne sur l'appareil : rien de ce qui est écrit ici n'est envoyé à un serveur.
    La discussion se comporte comme les autres (liste d'accueil, favori / archive / silence / renommage, non lus, même écran),
    mais elle est locale : état et historique sont gardés dans le navigateur, par compte.
-   Les boutons d'action exécutent de vraies opérations de l'application et ne s'exécutent que sur appui.
-   Ils restent utilisables autant de fois qu'on veut, sauf les actions d'envoi ou de blocage (ONCE) : une fois faites, le bouton se grise. */
+   Les actions (envoi, sondages, listes, agenda, blocage, thème…) sont exécutées par assistant-actions.js : aperçu modifiable ou exécution directe, au choix.
+   Ici : la discussion locale, les actions de l'appareil (réglages, profil, installation…), l'agenda et le suivi de fichiers. */
 (() => {
   'use strict';
   const P = window.Piaf, KB = window.T2P;
@@ -12,8 +12,8 @@
 
   const AID = 'talk2piaf', NAME = 'Talk2Piaf', MAX_MSGS = 80;
   // Actions qui ne doivent partir qu'une fois (un message envoyé, un blocage…) ; tous les autres boutons restent réutilisables.
-  const ONCE = new Set(['send', 'block', 'unblock', 'revoke', 'forget', 'watch_stop']);
-  const usedUp = (a) => !!(a && a.done && ONCE.has(a.a));
+  const ONCE = () => (P.t2pa ? P.t2pa.ONCE : new Set(['unblock', 'revoke', 'forget', 'watch_stop']));
+  const usedUp = (a) => !!(a && a.done && ONCE().has(a.a));
   // Moteur de recherche choisi dans Paramètres (réglage de l'appareil, jamais envoyé au serveur)
   const SKEY = 'piaf-t2p-search';
   const searchPref = () => { const v = store.get(SKEY, null); return v && typeof v === 'object' ? v : { id: 'ddg' }; };
@@ -27,7 +27,7 @@
   function welcome() {
     const first = (S.me.display_name || '').split(/\s+/)[0];
     return { role: 'assistant', at: nowIso(), eph: false, links: [], acts: [], chips: KB.starters().slice(0, 4),
-      text: `Bonjour${first ? ' ' + first : ''} ! Je suis Talk2Piaf, l’assistant de Piaf. Posez-moi vos questions sur l’application, ou demandez-moi d’agir : je prépare l’action, et vous la lancez d’un appui sur le bouton.\nTapez @ pour mentionner un contact. Par exemple : « écris à @Marie : j’arrive », « libérer de l’espace » ou « comment créer un sondage ? ».` };
+      text: `Bonjour${first ? ' ' + first : ''} ! Je suis Talk2Piaf, l’assistant de Piaf. Posez-moi vos questions sur l’application, ou demandez-moi d’agir : message, sondage, liste, rendez-vous dans votre calendrier, blocage, thème… Je prépare l’action, vous pouvez tout modifier avant de valider.\nDans n’importe quelle discussion, écrivez @Talk2Piaf suivi de votre demande : elle et ma réponse restent chez vous seul. Par exemple : « écris à @Marie : j’arrive », « fais un sondage : pizza ou sushi ? » ou « mets le thème sombre ».` };
   }
   function state() {
     if (!S.me) return null;
@@ -54,6 +54,7 @@
   };
   P.withAssistant = (convs) => (S.me ? [...convs, P.assistantConv()].sort((a, b) => new Date(b.last_at) - new Date(a.last_at)) : convs);
   P.assistantAvatar = (size = 44) => h('span', { class: 'avatar t2p', style: { width: size + 'px', height: size + 'px' }, 'aria-hidden': 'true' }, h('img', { src: 'icons/talk2piaf.svg', alt: '' }));
+  P.assistantActionsAvatar = (size = 44) => h('span', { class: 'avatar t2p t2a', style: { width: size + 'px', height: size + 'px' }, 'aria-hidden': 'true' }, h('img', { src: 'icons/talk2piaf-actions.svg', alt: '' }));
   P.openAssistant = () => P.go('#/talk2piaf');
 
   // Section « Assistant Talk2Piaf » de l'écran Paramètres (moteur de recherche proposé par l'assistant)
@@ -71,7 +72,13 @@
       if (sel.value === 'custom') { customBox.hidden = false; url.focus(); return; }
       customBox.hidden = true; err.hidden = true; store.set(SKEY, { id: sel.value }); toast('Moteur de recherche : ' + KB.engineOf({ id: sel.value }).name); } },
       ...KB.ENGINES.map((e) => h('option', { value: e.id, selected: pref.id === e.id }, e.name)), h('option', { value: 'custom', selected: isCustom }, 'Autre (adresse personnalisée)'));
+    const mode = h('select', { 'aria-label': 'Validation des actions', onchange: () => { P.t2pa.setMode(mode.value); toast(mode.value === 'direct' ? 'Actions exécutées directement' : 'Aperçu avant chaque action'); } },
+      h('option', { value: 'preview', selected: P.t2pa.mode() === 'preview' }, 'Aperçu modifiable avant d’agir'), h('option', { value: 'direct', selected: P.t2pa.mode() === 'direct' }, 'Exécution directe (modifier ou annuler après)'));
+    const erase = h('button', { class: 'btn', type: 'button', onclick: async () => {
+      if (await confirmDialog('Effacer vos échanges ?', 'Toutes vos demandes à Talk2Piaf et ses réponses, dans toutes vos discussions, seront effacées de cet appareil. Elles n’existent nulle part ailleurs.', 'Effacer', true)) { P.t2pa.log.clearAll(); toast('Échanges effacés'); } } }, 'Effacer mes échanges avec Talk2Piaf');
     return h('section', { class: 'card' }, h('h2', null, 'Assistant Talk2Piaf'),
+      h('div', { class: 'row-text' }, h('strong', null, 'Actions'), h('span', { class: 'muted small' }, 'Quand Talk2Piaf Actions envoie un message, publie un sondage ou une liste… : vous validez un aperçu modifiable, ou l’action part tout de suite et vous pouvez la modifier ou l’annuler.')), mode,
+      h('div', { class: 'row-text' }, h('strong', null, 'Mes échanges'), h('span', { class: 'muted small' }, 'Vos demandes et les réponses dans les discussions ne sont gardées que sur cet appareil.')), erase,
       h('div', { class: 'row-text' }, h('strong', null, 'Moteur de recherche'), h('span', { class: 'muted small' }, 'Utilisé quand je vous propose une recherche sur le web (« cherche … sur le web »). Réglage conservé sur cet appareil ; la recherche s’ouvre dans un nouvel onglet.')),
       sel, customBox);
   };
@@ -90,12 +97,11 @@
           if (v !== null) { s.nick = v.trim() || null; changed(); } } },
       { sep: true },
       { icon: 'trash', danger: true, label: 'Supprimer l’historique pour moi', onClick: async () => {
-          if (await confirmDialog('Supprimer l’historique ?', 'Votre échange avec Talk2Piaf sera effacé de cet appareil. Cette action est définitive.', 'Supprimer', true)) { s.msgs = []; mem.topic = null; mem.offer = null; changed(); toast('Historique supprimé'); opts.afterClear?.(); } } },
+          if (await confirmDialog('Supprimer l’historique ?', 'Votre échange avec Talk2Piaf sera effacé de cet appareil. Cette action est définitive.', 'Supprimer', true)) { s.msgs = []; P.t2pa.log.clear('_'); changed(); toast('Historique supprimé'); opts.afterClear?.(); } } },
     ]);
   };
 
-  // ---------------------------------------------------------------- contexte fourni au moteur (état réel de l'application)
-  const mem = { topic: null, offer: null };
+  // ---------------------------------------------------------------- contexte fourni au moteur (état réel de l'application) ; assistant-actions.js y ajoute la discussion ouverte
   const inviteText = () => `Salut ! Je suis sur Piaf, une messagerie privée sans e-mail ni numéro de téléphone. Crée ton compte, puis écris-moi avec mon identifiant : ${S.me.public_id}. L'application : ${location.origin}${location.pathname}`;
   function context() {
     const me = S.me || {};
@@ -126,7 +132,7 @@
   P.calOpen = calOpen;
 
   // ---------------------------------------------------------------- suivi de fichiers (GitHub) : fonctions serveur de la migration 010_watchers.sql
-  // conv = identifiant de la discussion (suivi publié dans la discussion, Talk2Piaf Cowork) ou null (suivi personnel, alertes dans Talk2Piaf)
+  // conv = identifiant de la discussion (suivi publié dans la discussion) ou null (suivi personnel, alertes dans Talk2Piaf)
   const when = (iso) => new Date(iso).toLocaleString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
   const shortLabel = (t) => (t.length > 34 ? t.slice(0, 33) + '…' : t);
   P.watchOps = {
@@ -186,6 +192,7 @@
   const openConvAct = (id) => ({ l: 'Ouvrir la discussion', a: 'conv', p: { id } });
   const rnd = (n) => { const a = new Uint32Array(1); let x; do { crypto.getRandomValues(a); x = a[0]; } while (x >= Math.floor(4294967296 / n) * n); return x % n; };
 
+  // Actions de l'appareil. send, block, thème, sondages, listes, agenda (aperçu modifiable) : voir assistant-actions.js.
   // Chaque action renvoie { say, eph?, acts?, nodone? } (réponse de l'assistant), { clear } ou null ; elle lève une erreur à message lisible.
   const ACTIONS = {
     go: (p) => { P.go(p.h); return null; },
@@ -197,29 +204,6 @@
       if (!S.online) throw new Error('Pas de connexion : réessayez quand le réseau revient.');
       let id; try { id = await api.rpc('start_conversation', { p_public_id: p.pid }); } catch (e) { throw new Error(toCode(e) === 'not_found' ? 'Aucune personne ne correspond à cet identifiant.' : errText(e)); }
       await P.refreshConvs(); P.go('#/c/' + id); return null;
-    },
-    async send(p) {
-      const c = convById(p.id); if (!c) throw new Error('Cette discussion n’existe plus.');
-      if (c.blocked_by_me) throw new Error('Vous avez bloqué cette personne : débloquez-la d’abord.');
-      const body = String(p.t || '').trim(); if (!body || body.length > 4000) throw new Error('Message vide ou trop long.');
-      const label = P.convName(c);
-      if (S.online) {
-        try {
-          const row = await api.rpc('send_message', { p_conv: p.id, p_client_id: P.uuid(), p_body: body, p_reply_to: null, p_forwarded: false });
-          P.bus.emit('sent', row); P.refreshConvs().catch(() => {});
-          return { say: `Message envoyé à ${label}. ✅`, acts: [openConvAct(p.id)] };
-        } catch (e) { if (toCode(e) !== 'network') throw new Error(errText(e)); }
-      }
-      await P.queueMessage(p.id, body);
-      return { say: `Pas de connexion pour l’instant : le message pour ${label} est en file d’attente et partira dès que le réseau reviendra. 🕓`, acts: [openConvAct(p.id)] };
-    },
-    async block(p) {
-      const c = convById(p.id); if (!c) throw new Error('Cette discussion n’existe plus.');
-      if (c.kind === 'group' || !c.other_id) throw new Error('On ne peut pas bloquer un groupe.');
-      if (c.blocked_by_me) return { say: `${p.n} est déjà bloqué·e.` };
-      if (!(await confirmDialog('Bloquer ' + p.n + ' ?', 'Cette personne ne pourra plus vous écrire, et vous ne pourrez plus lui écrire tant que le blocage dure. Vous pourrez la débloquer dans Paramètres.', 'Bloquer', true))) return { say: 'D’accord, rien n’a été modifié.', nodone: true };
-      try { await api.rpc('block_user', { p_target: c.other_id }); await P.refreshConvs(); } catch (e) { throw new Error(errText(e)); }
-      return { say: `${p.n} est bloqué·e. Pour annuler : « débloque ${p.n} ».`, acts: [{ l: 'Débloquer ' + p.n, a: 'unblock', p: { id: p.id, n: p.n } }] };
     },
     async unblock(p) {
       const c = convById(p.id); if (!c || !c.other_id) throw new Error('Cette discussion n’existe plus.');
@@ -270,7 +254,6 @@
       try { await saveSetting({ notifications: true }); } catch (e) { throw new Error(errText(e)); }
       return { say: 'Notifications activées : vous serez prévenu des nouveaux messages tant que l’application est ouverte ou en arrière-plan.' };
     },
-    theme: (p) => { store.set('piaf-theme', p.m); P.applyTheme(); return { say: { dark: 'Thème sombre activé. 🌙', light: 'Thème clair activé. ☀️', auto: 'Thème automatique activé (il suit votre appareil).' }[p.m] }; },
     async refresh() { await P.refreshConvs(); return { say: 'Discussions actualisées.' }; },
     reload: () => { location.reload(); return null; },
     async clearcache() { try { for (const k of await caches.keys()) await caches.delete(k); const regs = await navigator.serviceWorker?.getRegistrations?.(); for (const r of regs || []) await r.unregister(); } catch { /* */ } location.reload(); return null; },
@@ -281,7 +264,6 @@
     },
     forget: () => ({ clear: true }),
     reveal: (p) => ({ say: p.t }),
-    cal_ics: (p) => calOpen('ics', p), cal_google: (p) => calOpen('google', p), cal_outlook: (p) => calOpen('outlook', p),
     watch_add: (p) => P.watchOps.add(p, null), watch_list: () => P.watchOps.list(null, false), watch_stop: (p) => P.watchOps.stop(p),
   };
 
@@ -294,29 +276,7 @@
   P.assistantInline = inline;
   const sameGroup = (a, b) => a && b && a.role === b.role && fmt.dayKey(a.at) === fmt.dayKey(b.at) && Math.abs(new Date(b.at) - new Date(a.at)) < 300000;
 
-  // ---------------------------------------------------------------- relais depuis Talk2Piaf Cowork : réponse locale de Talk2Piaf, visible par la seule personne qui la demande
-  // views-chat.js marque chaque bouton « done » après un appui : pour les actions réutilisables on neutralise ce drapeau.
-  const mkAct = (a) => { const o = { l: a.l, a: a.a, p: a.p || {} }; if (!ONCE.has(a.a)) Object.defineProperty(o, 'done', { get: () => false, set: () => {}, enumerable: false }); return o; };
-  P.assistantAsk = (q) => {
-    let r; try { r = KB.reply(q, context(), mem); } catch (e) { console.error(e); r = null; }
-    if (!r) r = { text: 'Je n’ai pas réussi à traiter ce message. Pouvez-vous le reformuler ?', chips: KB.starters().slice(0, 4), links: [], acts: [] };
-    if (r.topic !== undefined) mem.topic = r.unknown ? null : (r.topic || mem.topic);
-    mem.offer = (r.acts && r.acts[0]) || null;
-    return { text: r.text, links: r.links || [], acts: (r.acts || []).map(mkAct), chips: r.chips || [] };
-  };
-  P.assistantRun = async (act) => { const fn = ACTIONS[act.a]; return fn ? fn(act.p || {}) : null; };
-  P.assistantBubble = (r, o) => {
-    const extras = [];
-    const links = (r.links || []).map((l) => { const u = safeUrl(l.u); return u ? h('a', { class: 't2p-link', href: u, target: '_blank', rel: 'noopener noreferrer nofollow' }, l.l) : null; }).filter(Boolean);
-    if (links.length) extras.push(h('div', { class: 't2p-links' }, links));
-    if (r.acts && r.acts.length) extras.push(h('div', { class: 't2p-acts' }, r.acts.map((a, j) => h('button', { type: 'button', class: 't2p-act' + (usedUp(a) ? ' done' : ''), disabled: usedUp(a), onclick: (e) => o.onAct(j, e.currentTarget) }, a.l))));
-    if (o.showChips && r.chips && r.chips.length) extras.push(h('div', { class: 't2p-chips' }, r.chips.map((c) => h('button', { type: 'button', class: 't2p-chip', onclick: () => o.onChip(c.t) }, c.l))));
-    const bubble = h('div', { class: 'bubble first last whisper', tabindex: '0', role: 'button', 'aria-haspopup': 'dialog', 'aria-label': 'Réponse de ' + (o.name || NAME),
-      onclick: () => o.onMenu(), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); o.onMenu(); } } },
-      h('div', { class: 'sender t2p-name' }, o.name || NAME), h('div', { class: 'text' }, inline(r.text)),
-      h('div', { class: 'meta' }, h('time', { datetime: o.time }, fmt.time(o.time)), h('span', null, o.note || ' · visible par vous seul')));
-    return h('div', { class: 'msg gap', role: 'listitem' }, bubble, extras.length ? h('div', { class: 't2p-extras' }, extras) : null);
-  };
+  P.assistantContext = context; P.assistantActions = ACTIONS; // utilisés par assistant-actions.js
 
   P.views.assistant = () => {
     const s = state();
@@ -378,7 +338,7 @@
     }
     function buildMsg(m, idx, first, last, isLastMsg) {
       const mine = m.role === 'user';
-      const parts = [h('div', { class: 'text' }, mine ? richUser(m.text) : inline(m.text)),
+      const parts = [!mine && m.by === 'actions' ? h('div', { class: 'sender t2p-name' }, P.assistantActionsAvatar(16), 'Talk2Piaf Actions') : null, h('div', { class: 'text' }, mine ? richUser(m.text) : inline(m.text)),
         h('div', { class: 'meta' }, h('time', { datetime: m.at }, fmt.time(m.at)), mine ? h('span', { class: 'st read', title: 'Lu' }, icon('check2', 16)) : null)];
       const bubble = h('div', { class: 'bubble' + (mine ? ' mine' : '') + (first ? ' first' : '') + (last ? ' last' : ''), tabindex: '0', role: 'button', 'aria-haspopup': 'dialog', 'aria-label': 'Actions du message',
         onclick: () => msgSheet(idx), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); msgSheet(idx); } } }, parts);
@@ -432,33 +392,29 @@
     }
     async function runAct(idx, j, btn) {
       const act = s.msgs[idx] && s.msgs[idx].acts[j]; if (!act || usedUp(act)) return;
-      const fn = ACTIONS[act.a]; if (!fn) return;
       btn.disabled = true;
       try {
-        const r = await fn(act.p || {});
+        const r = await P.t2pa.press(act, {});
         if (destroyed) return;
-        if (r && r.clear) { s.msgs = []; mem.topic = null; mem.offer = null; changed(); render(); toast('Historique effacé'); return; }
-        if (ONCE.has(act.a) && !(r && r.nodone)) act.done = true;
+        if (r.clear) { s.msgs = []; P.t2pa.log.clear('_'); changed(); render(); toast('Historique effacé'); return; }
+        if (r.done && ONCE().has(act.a)) act.done = true;
         btn.disabled = usedUp(act);
-        if (r && r.say) { push({ role: 'assistant', text: r.say, acts: (r.acts || []).map((a) => ({ l: a.l, a: a.a, p: a.p || {} })), eph: !!r.eph }); } else { changed(); render(); }
+        if (r.items.length) r.items.forEach((m) => push({ role: 'assistant', text: m.text, acts: m.acts, eph: !!m.eph })); else { changed(); render(); }
       } catch (e) {
         if (destroyed) return;
         btn.disabled = false; push({ role: 'assistant', text: '⚠️ ' + (e && e.message ? e.message : 'L’action n’a pas pu aboutir. Réessayez.') });
       }
     }
-    function sendText(text) {
+    async function sendText(text) {
       const v = String(text != null ? text : ta.value).trim(); if (!v || busy) return;
       if (text == null) { ta.value = ''; ta.style.height = 'auto'; }
       busy = true; typing = true; push({ role: 'user', text: v.slice(0, 600) });
-      let r; try { r = KB.reply(v, context(), mem); } catch (e) { console.error(e); r = null; }
-      if (!r) r = { text: 'Je n’ai pas réussi à traiter ce message. Pouvez-vous le reformuler ?', chips: KB.starters().slice(0, 4), links: [], acts: [] };
+      let items; try { items = await P.t2pa.ask(v, {}); } catch (e) { items = [null, P.t2pa.failItem(e)]; }
       timer = setTimeout(() => {
-        typing = false; busy = false;
-        if (r.topic !== undefined) mem.topic = r.unknown ? null : (r.topic || mem.topic);
-        mem.offer = (r.acts && r.acts[0]) || null;
-        push({ role: 'assistant', text: r.text, links: r.links || [], acts: (r.acts || []).map((a) => ({ l: a.l, a: a.a, p: a.p || {} })), chips: r.chips || [] });
-        if (!destroyed && matchMedia('(pointer:fine)').matches) ta.focus({ preventScroll: true });
-      }, Math.min(700, 220 + r.text.length * 2));
+        typing = false; busy = false; if (destroyed) return;
+        items.slice(1).forEach((m) => push({ role: 'assistant', text: m.text, links: m.links, acts: m.acts, chips: m.chips, eph: !!m.eph, by: m.by }));
+        if (matchMedia('(pointer:fine)').matches) ta.focus({ preventScroll: true });
+      }, Math.min(700, 220 + String(items[items.length - 1].text).length * 2));
     }
 
     drawHeader(); render(); markRead();
