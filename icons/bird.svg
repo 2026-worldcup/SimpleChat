@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Piaf, un moineau"><g transform="translate(-10.240000000000009 -10.240000000000009) scale(1.04)"><g transform="translate(-4 6)">
+  <g fill="#fff7ed">
+    <path d="M118 292 L40 322 Q26 334 38 348 L52 352 L146 330 Z"/>
+    <ellipse cx="240" cy="292" rx="152" ry="112" transform="rotate(-10 240 292)"/>
+    <circle cx="352" cy="196" r="68"/>
+    <ellipse cx="338" cy="262" rx="64" ry="70"/>
+  </g>
+  <path d="M414 184 L468 206 L416 224 Z" fill="#fbbf24"/>
+  <path d="M168 262 Q246 206 338 258 Q318 346 214 352 Q146 334 168 262 Z" fill="#f4a574"/>
+  <path d="M206 278 Q252 252 304 278 M200 308 Q250 286 296 308" fill="none" stroke="#c2410c" stroke-width="7" stroke-linecap="round" opacity=".55"/>
+  <circle cx="368" cy="184" r="10" fill="#2b1308"/>
+  <circle cx="371" cy="181" r="3" fill="#fff"/>
+  <g stroke="#fff7ed" stroke-width="12" stroke-linecap="round" fill="none">
+    <path d="M222 396 L218 436 M212 438 L232 438"/><path d="M270 398 L276 436 M266 438 L288 438"/>
+    <path d="M440 136 Q466 150 468 178" opacity=".95"/><path d="M458 112 Q496 134 498 176" opacity=".7"/>
+  </g></g></g></svg>

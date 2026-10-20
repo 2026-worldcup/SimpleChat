@@ -27,7 +27,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const ICONS = {
   users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14.5a5.5 5.5 0 0 1 4.5 5.5"/>',
   camera: '<path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/>', // tracés 24×24, icônes trait fin (constantes, jamais de contenu utilisateur)
-  back: '<path d="M15 18l-6-6 6-6"/>', plus: '<path d="M12 5v14M5 12h14"/>', x: '<path d="M18 6L6 18M6 6l12 12"/>',
+  compose: '<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>', back: '<path d="M15 18l-6-6 6-6"/>', plus: '<path d="M12 5v14M5 12h14"/>', x: '<path d="M18 6L6 18M6 6l12 12"/>',
   send: '<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>',
   clip: '<path d="M21.4 11.6l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
@@ -399,7 +399,7 @@ function applyTheme() {
   const t = store.get('piaf-theme', 'auto');
   if (t === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', t);
   const dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
-  $('meta[name=theme-color]').setAttribute('content', dark ? '#17120e' : '#fbf7f2');
+  $('meta[name=theme-color]').setAttribute('content', dark ? '#17120e' : '#eceeef');
 }
 Piaf.applyTheme = applyTheme; matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
 function fitViewport() { // clavier mobile : la zone d'appli suit la hauteur réellement visible

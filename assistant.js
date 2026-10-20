@@ -292,7 +292,7 @@
     const composer = h('div', { class: 'composer' }, pop, h('div', { class: 'composer-row' }, ta, sendBtn));
     const headTitle = h('button', { class: 'chat-title', type: 'button', onclick: () => profileSheet() });
     const header = h('header', { class: 'topbar chat-top' }, iconBtn('back', 'Retour aux discussions', () => P.back('#/')), headTitle, iconBtn('dots', 'Menu de la discussion', () => menu()));
-    const el = h('div', { class: 'screen chat' }, header, h('div', { class: 'msgs-wrap' }, scroller), composer);
+    const el = h('div', { class: 'screen chat t2p-screen' }, header, h('div', { class: 'msgs-wrap' }, scroller), composer);
 
 
     // ---- @contact : la liste vient de vos discussions (personnes et groupes) ; le moteur comprend « écris à @Marie : … », « ouvre @Marie »…

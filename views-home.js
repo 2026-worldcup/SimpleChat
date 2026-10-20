@@ -26,7 +26,7 @@ Piaf.convMenu = (c, opts = {}) => sheet(Piaf.convName(c), [
 Piaf.views.auth = () => {
   let mode = 'login', created = null, busy = false;
   const el = h('div', { class: 'screen auth' });
-  const brand = h('div', { class: 'brand' }, h('img', { class: 'brand-img', src: 'icons/icon.svg', alt: '', width: '84', height: '84' }), h('h1', null, 'Piaf'), h('p', { class: 'muted' }, 'Messagerie privée, simple et légère'), h('p', { class: 'muted small' }, 'Sans adresse e-mail, sans numéro de téléphone.'));
+  const brand = h('div', { class: 'brand' }, h('div', { class: 'brand-panel' }, h('img', { class: 'brand-img', src: 'icons/bird.svg', alt: '', width: '220', height: '220' })), h('h1', null, 'Piaf'), h('p', { class: 'muted' }, 'Messagerie privée, simple et légère'), h('p', { class: 'muted small' }, 'Sans adresse e-mail, sans numéro de téléphone.'));
 
   function field(label, input, extra) { return h('label', { class: 'field' }, h('span', null, label), input, extra || null); }
   function secretInput(auto) {
@@ -93,7 +93,7 @@ Piaf.views.home = () => {
   const search = h('input', { type: 'search', placeholder: 'Rechercher une discussion', 'aria-label': 'Rechercher une discussion', oninput: (e) => { filter = e.target.value.trim().toLowerCase(); drawList(); } });
   const list = h('div', { class: 'conv-list', role: 'list' });
   const tabsEl = h('div', { class: 'tabs small', role: 'tablist' });
-  const fab = h('button', { class: 'fab', type: 'button', 'aria-label': 'Nouvelle discussion', onclick: () => Piaf.go('#/new') }, icon('plus', 26));
+  const fab = h('button', { class: 'fab', type: 'button', 'aria-label': 'Nouvelle discussion', onclick: () => Piaf.go('#/new') }, icon('compose', 26));
 
   const clip = (t) => { const x = String(t == null ? '' : t).replace(/\s+/g, ' ').trim(); return x.length > 120 ? x.slice(0, 120) + '…' : x; };
   function preview(c) { return clip(rawPreview(c)); }
@@ -124,9 +124,9 @@ Piaf.views.home = () => {
     }
     list.replaceChildren(...rows.map((c) => h('div', { class: 'conv' + (c.unread ? ' unread' : ''), role: 'listitem' },
       h('button', { class: 'conv-open', type: 'button', onclick: () => Piaf.go(c.assistant ? '#/talk2piaf' : '#/c/' + c.conversation_id), 'aria-label': `${Piaf.convName(c)}${c.unread ? `, ${c.unread} non lus` : ''}` },
-        c.assistant ? Piaf.assistantAvatar(44) : avatar(Piaf.convName(c), 44, c.other_id, c.avatar_path, c.kind === 'group'),
+        c.assistant ? Piaf.assistantAvatar(50) : avatar(Piaf.convName(c), 50, c.other_id, c.avatar_path, c.kind === 'group'),
         h('span', { class: 'conv-main' },
-          h('span', { class: 'conv-top' }, h('span', { class: 'conv-name' }, Piaf.convName(c), c.assistant ? h('span', { class: 'tag' }, 'Assistant') : null), h('span', { class: 'conv-time' }, fmt.listTime(c.last_at))),
+          h('span', { class: 'conv-top' }, h('span', { class: 'conv-name' }, Piaf.convName(c), c.assistant ? h('span', { class: 'tag' }, 'Assistant') : c.kind === 'group' ? h('span', { class: 'tag mute' }, 'Groupe') : null), h('span', { class: 'conv-time' }, fmt.listTime(c.last_at))),
           h('span', { class: 'conv-bot' }, h('span', { class: 'conv-prev' }, preview(c)),
             c.muted ? icon('mute', 16) : null, c.favorite ? icon('star', 16) : null,
             c.unread && S.mentions && S.mentions[c.conversation_id] ? h('span', { class: 'badge at', title: 'Vous avez été mentionné(e)', 'aria-label': 'Mention non lue' }, '@') : null,
@@ -136,7 +136,7 @@ Piaf.views.home = () => {
   async function refresh() { try { loadErr = false; await Piaf.refreshConvs(); } catch { loadErr = true; drawList(); } }
   const unsubs = [bus.on('convs', drawList), bus.on('resync', refresh), bus.on('visible', refresh)];
   const el = h('div', { class: 'screen home' },
-    h('header', { class: 'topbar' }, h('h1', { class: 'logo' }, 'Piaf'), iconBtn('sliders', 'Profil et paramètres', () => Piaf.go('#/settings'))),
+    h('header', { class: 'topbar' }, h('img', { class: 'logo-mark', src: 'icons/icon.svg', alt: '', width: '38', height: '38' }), h('h1', { class: 'logo' }, 'Piaf'), iconBtn('sliders', 'Profil et paramètres', () => Piaf.go('#/settings'))),
     h('div', { class: 'searchbar' }, icon('search', 18), search), tabsEl, list, fab);
   drawList();
   return { el, mounted() { refresh(); }, destroy() { unsubs.forEach((u) => u()); } };

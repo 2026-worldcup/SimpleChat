@@ -1,13 +1,18 @@
-/* Piaf — styles. Mobile d'abord. Thème clair/sombre via variables. */
+/* Piaf — styles. Mobile d'abord. Thème clair/sombre via variables.
+   Nouveau look : gris cendré, bleu nuit, orange du moineau ; Bricolage Grotesque (titres) et Instrument Sans (texte), servies depuis /fonts. */
+@font-face { font-family: 'Bricolage Grotesque'; src: url(fonts/bricolage-grotesque-latin-wght-normal.woff2) format('woff2'); font-weight: 200 800; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Instrument Sans'; src: url(fonts/instrument-sans-latin-wght-normal.woff2) format('woff2'); font-weight: 400 700; font-style: normal; font-display: swap; }
 :root {
-  --bg: #fbf7f2; --surface: #ffffff; --surface2: #f3ece4; --ink: #1d1712; --muted: #6f6256; --line: #e6dccf;
-  --accent: #c2410c; --accent-ink: #ffffff; --accent-soft: #ffe6d3; --mine: #ffe6d3; --theirs: #ffffff;
-  --danger: #b42318; --ok: #1f7a4d; --shadow: 0 6px 24px rgba(40, 20, 5, .14);
+  --bg: #eceeef; --surface: #ffffff; --surface2: #f1f3f5; --ink: #161a21; --muted: #5b6472; --line: #d9dde2; --line-strong: #cbd1d8;
+  --accent: #c2410c; --accent-ink: #ffffff; --accent-soft: #fce9dc; --mine: #1e2a3b; --theirs: #ffffff;
+  --danger: #b42318; --ok: #1f7a4d; --shadow: 0 8px 28px rgba(22, 26, 33, .16);
   --r: 16px; --tap: 44px; --app-h: 100dvh; --app-top: 0px;
+  --display: 'Bricolage Grotesque', 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --text: 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #17120e; --surface: #221b15; --surface2: #2b221b; --ink: #f4ece4; --muted: #b3a597; --line: #3a2f26; --accent: #f97316; --accent-ink: #1a0e05; --accent-soft: #4a2410; --mine: #5a2a10; --theirs: #2b221b; --danger: #ff8a7a; --ok: #5bd69a; color-scheme: dark; } }
-:root[data-theme="dark"] { --bg: #17120e; --surface: #221b15; --surface2: #2b221b; --ink: #f4ece4; --muted: #b3a597; --line: #3a2f26; --accent: #f97316; --accent-ink: #1a0e05; --accent-soft: #4a2410; --mine: #5a2a10; --theirs: #2b221b; --danger: #ff8a7a; --ok: #5bd69a; color-scheme: dark; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #17120e; --surface: #221b15; --surface2: #2b221b; --ink: #f4ece4; --muted: #b3a597; --line: #3a2f26; --line-strong: #4a3c30; --accent: #f97316; --accent-ink: #1a0e05; --accent-soft: #4a2410; --mine: #5a2a10; --theirs: #2b221b; --danger: #ff8a7a; --ok: #5bd69a; color-scheme: dark; } }
+:root[data-theme="dark"] { --bg: #17120e; --surface: #221b15; --surface2: #2b221b; --ink: #f4ece4; --muted: #b3a597; --line: #3a2f26; --line-strong: #4a3c30; --accent: #f97316; --accent-ink: #1a0e05; --accent-soft: #4a2410; --mine: #5a2a10; --theirs: #2b221b; --danger: #ff8a7a; --ok: #5bd69a; color-scheme: dark; }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); overscroll-behavior: none; }
@@ -248,3 +253,74 @@ input[type=datetime-local] { width: 100%; min-height: var(--tap); padding: 8px 1
 .search-tags { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 0; } .search-tags[hidden] { display: none; }
 select { width: 100%; min-height: var(--tap); padding: 0 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: inherit; font: inherit; margin-top: 8px; }
 .card > select + .row-text, .card > .btn + .row-text { margin-top: 14px; }
+
+/* ================= Nouveau look (surcouche : s'applique après les règles ci-dessus) ================= */
+body { font-family: var(--text); }
+h1, h2, .sheet-title, .modal h2 { font-family: var(--display); letter-spacing: -.01em; }
+.avatar { font-family: var(--display); }
+.avatar.sq, .avatar-edit.sq { border-radius: 30%; }
+input[type=text], input[type=password], input[type=search], input:not([type]), textarea, select, input[type=datetime-local] { border-color: var(--line-strong); }
+.btn { border-color: var(--line-strong); }
+
+/* barres du haut, accueil */
+.topbar { min-height: 60px; padding-left: 6px; padding-right: 8px; }
+.topbar h1 { font-size: 1.15rem; font-weight: 700; }
+.logo-mark { width: 38px; height: 38px; border-radius: 11px; flex: none; margin-left: 12px; }
+.logo { font-size: 2rem !important; font-weight: 700; letter-spacing: -.02em; line-height: 1; }
+.home { background: var(--bg); }
+.home > .topbar { background: transparent; border-bottom: 0; min-height: 66px; padding-top: calc(env(safe-area-inset-top) + 10px); }
+.home .searchbar { background: var(--surface); border: 1px solid var(--line); margin: 6px 20px 4px; }
+.home .tabs.small { gap: 8px; padding: 10px 20px 12px; }
+.home .tabs.small .tab { flex: none; min-height: 36px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); color: var(--ink); font-size: .9rem; }
+.home .tabs.small .tab.on { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.home .conv-list { background: var(--surface); border-radius: 22px 22px 0 0; padding-top: 8px; }
+.conv { border-bottom: 0; }
+.conv-open { min-height: 74px; padding: 9px 4px 9px 20px; }
+.conv-name { font-size: 1.03rem; font-weight: 600; }
+.conv.unread .conv-name { font-weight: 700; }
+.conv-time { font-variant-numeric: tabular-nums; }
+.conv.unread .conv-time { color: var(--accent); font-weight: 700; }
+.conv-name .tag { margin-left: 8px; padding: 1px 6px; border: 1px solid currentColor; border-radius: 5px; background: transparent; color: var(--accent); font-size: .66rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; line-height: 1.3; }
+.conv-name .tag.mute { color: var(--muted); }
+.badge { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; margin-left: 0; border-radius: 7px; font-size: .75rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.tab .badge { margin-left: 7px; }
+.badge.soft, .badge.at { background: var(--accent-soft); color: var(--accent); }
+.fab { border-radius: 18px; box-shadow: 0 12px 26px color-mix(in srgb, var(--accent) 38%, transparent); }
+
+/* discussion : bulles à queue, composeur */
+.chat-title-text strong { font-family: var(--display); font-size: 1.1rem; letter-spacing: -.01em; }
+.day span { background: color-mix(in srgb, var(--ink) 9%, var(--bg)); color: var(--muted); font-weight: 600; border-radius: 9px; }
+.bubble { border-radius: 6px 18px 18px 6px; padding: 8px 13px 6px; }
+.bubble.first { border-top-left-radius: 18px; }
+.bubble.last { border-bottom-left-radius: 6px; }
+.bubble.mine { border-radius: 18px 6px 6px 18px; }
+.bubble.mine.first { border-top-right-radius: 18px; }
+.bubble.mine.last { border-bottom-right-radius: 6px; }
+/* mes bulles sont sombres : les variables de texte et de surface sont redéfinies localement, tout ce qu'elles contiennent (sondages, listes, audio, citation) suit */
+.bubble.mine:not(.t2p-bubble) { --ink: #f4f6f8; --muted: #b7c2d1; --surface: rgba(255, 255, 255, .09); --surface2: rgba(255, 255, 255, .14); --line: rgba(255, 255, 255, .24); --accent: #f4a25c; --accent-ink: #1a0e05; --accent-soft: rgba(244, 162, 92, .2); color: var(--ink); }
+.bubble.mine .quote { background: rgba(255, 255, 255, .1); }
+.bubble.mine .st.read { color: #8cc3f0; }
+.poll-q strong, .todo-head strong { font-family: var(--display); font-size: 1.05rem; letter-spacing: -.01em; }
+.composer { background: var(--surface); }
+.composer textarea { border-radius: 14px; background: var(--surface2); }
+.send { border-radius: 14px; }
+
+/* Talk2Piaf : écran toujours sombre et chaud, demandes et réponses en pointillés */
+.t2p-screen { --bg: #17120e; --surface: #221b15; --surface2: #2b221b; --ink: #f4ece4; --muted: #b3a597; --line: #3a2f26; --line-strong: #4a3c30; --accent: #f97316; --accent-ink: #1a0e05; --accent-soft: #4a2410; --theirs: #2b221b; --danger: #ff8a7a; --ok: #5bd69a; background: var(--bg); color: var(--ink); color-scheme: dark; }
+.bubble.t2p-bubble.t2p-ask.first.last { border-radius: 18px 18px 6px 18px; }
+.bubble.t2p-bubble.t2p-say.first.last { border-radius: 18px 18px 18px 6px; }
+.t2p-act, .t2p-chip, .t2p-link { border-radius: 8px; }
+
+/* connexion : panneau orange et moineau */
+.auth { padding: 0; }
+.auth-inner { max-width: 468px; padding: 0 24px 24px; }
+.brand { padding: 0; text-align: left; }
+.brand-panel { display: grid; place-items: center; margin: 0 -24px 22px; padding: calc(env(safe-area-inset-top) + 28px) 0 24px; background: var(--accent); border-radius: 0 0 40px 40px; }
+.brand-panel .brand-img { width: min(220px, 58vw); height: auto; margin: 0; border-radius: 0; }
+.brand h1 { margin-bottom: 4px; font-size: 2.75rem; font-weight: 800; letter-spacing: -.03em; line-height: 1; color: var(--ink); }
+.brand p { margin: 0 0 4px; }
+.auth .tabs { gap: 0; margin: 14px 0 16px; padding: 3px; border-radius: 12px; background: color-mix(in srgb, var(--ink) 9%, var(--bg)); }
+.auth .tab { flex: 1; min-height: 40px; border: 0; border-radius: 9px; color: var(--muted); }
+.auth .tab.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(22, 26, 33, .14); }
+.auth input { min-height: 48px; font-size: 1.05rem; }
+.auth .btn.primary { background: var(--ink); border-color: var(--ink); color: var(--bg); min-height: 50px; }

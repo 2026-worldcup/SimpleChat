@@ -1,8 +1,8 @@
 /* Piaf — service worker : coquille de l'appli en cache (chargement rapide, installation PWA).
    Les appels à Supabase (autre origine) ne sont JAMAIS mis en cache : aucune donnée privée n'est stockée ici. */
-const CACHE = 'piaf-shell-v20';
+const CACHE = 'piaf-shell-v21';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'views-home.js', 'views-chat.js', 'views-groups.js', 'views-extras.js', 'assistant-calendar.js', 'assistant-watch.js', 'assistant-actions-kb.js', 'assistant-kb.js', 'assistant.js', 'assistant-actions.js', 'config.js', 'vendor/supabase.js',
-  'manifest.webmanifest', 'privacy.html', 'icons/icon.svg', 'icons/icon-192.png', 'icons/talk2piaf.svg', 'icons/talk2piaf-actions.svg'];
+  'manifest.webmanifest', 'privacy.html', 'icons/icon.svg', 'icons/bird.svg', 'fonts/bricolage-grotesque-latin-wght-normal.woff2', 'fonts/instrument-sans-latin-wght-normal.woff2', 'icons/icon-192.png', 'icons/talk2piaf.svg', 'icons/talk2piaf-actions.svg'];
 
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {
