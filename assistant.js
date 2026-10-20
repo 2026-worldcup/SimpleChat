@@ -54,6 +54,7 @@
   };
   P.withAssistant = (convs) => (S.me ? [...convs, P.assistantConv()].sort((a, b) => new Date(b.last_at) - new Date(a.last_at)) : convs);
   P.assistantAvatar = (size = 44) => h('span', { class: 'avatar t2p', style: { width: size + 'px', height: size + 'px' }, 'aria-hidden': 'true' }, h('img', { src: 'icons/talk2piaf.svg', alt: '' }));
+  P.assistantActionsAvatar = (size = 44) => h('span', { class: 'avatar t2p t2a', style: { width: size + 'px', height: size + 'px' }, 'aria-hidden': 'true' }, h('img', { src: 'icons/talk2piaf-actions.svg', alt: '' }));
   P.openAssistant = () => P.go('#/talk2piaf');
 
   // Section « Assistant Talk2Piaf » de l'écran Paramètres (moteur de recherche proposé par l'assistant)
@@ -337,7 +338,7 @@
     }
     function buildMsg(m, idx, first, last, isLastMsg) {
       const mine = m.role === 'user';
-      const parts = [h('div', { class: 'text' }, mine ? richUser(m.text) : inline(m.text)),
+      const parts = [!mine && m.by === 'actions' ? h('div', { class: 'sender t2p-name' }, P.assistantActionsAvatar(16), 'Talk2Piaf Actions') : null, h('div', { class: 'text' }, mine ? richUser(m.text) : inline(m.text)),
         h('div', { class: 'meta' }, h('time', { datetime: m.at }, fmt.time(m.at)), mine ? h('span', { class: 'st read', title: 'Lu' }, icon('check2', 16)) : null)];
       const bubble = h('div', { class: 'bubble' + (mine ? ' mine' : '') + (first ? ' first' : '') + (last ? ' last' : ''), tabindex: '0', role: 'button', 'aria-haspopup': 'dialog', 'aria-label': 'Actions du message',
         onclick: () => msgSheet(idx), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); msgSheet(idx); } } }, parts);
@@ -411,7 +412,7 @@
       let items; try { items = await P.t2pa.ask(v, {}); } catch (e) { items = [null, P.t2pa.failItem(e)]; }
       timer = setTimeout(() => {
         typing = false; busy = false; if (destroyed) return;
-        items.slice(1).forEach((m) => push({ role: 'assistant', text: m.text, links: m.links, acts: m.acts, chips: m.chips, eph: !!m.eph }));
+        items.slice(1).forEach((m) => push({ role: 'assistant', text: m.text, links: m.links, acts: m.acts, chips: m.chips, eph: !!m.eph, by: m.by }));
         if (matchMedia('(pointer:fine)').matches) ta.focus({ preventScroll: true });
       }, Math.min(700, 220 + String(items[items.length - 1].text).length * 2));
     }

@@ -288,6 +288,9 @@
   const memOf = (k) => { if (!mems.has(k)) mems.set(k, {}); return mems.get(k); };
   const fallback = () => ({ text: 'Je n’ai pas réussi à traiter ce message. Pouvez-vous le reformuler ?', chips: KB.starters().slice(0, 4), links: [], acts: [], unknown: true });
   const mk = (role, o) => Object.assign({ id: uuid(), role, at: new Date().toISOString(), text: '', links: [], acts: [], chips: [] }, o);
+  // Les réponses qui préparent ou exécutent une action sont signées « Talk2Piaf Actions » (autre avatar) ; les explications restent « Talk2Piaf »
+  const ACTION_IDS = new Set(['send', 'poll_create', 'list_create', 'list_add', 'poll_close', 'poll_delete', 'list_check', 'list_assign', 'list_clear_done', 'list_delete', 'cal_ics', 'cal_google', 'cal_outlook', 'block', 'unblock', 'theme', 'fav', 'arch', 'mute', 'receipts', 'notif', 'watch_add', 'msg_edit', 'msg_undo', 'obj_undo', 'obj_redo']);
+  const sign = (m, force) => { if (m.role === 'say' && (force || (m.acts || []).some((a) => ACTION_IDS.has(a.a)))) m.by = 'actions'; return m; };
   const cleanAct = (a) => ({ l: a.l, a: a.a, p: a.p || {} });
 
   // Question → échange à afficher et à garder localement : [demande, réponse (, résultat d'une action exécutée tout de suite)]
@@ -297,17 +300,17 @@
     const out = [mk('ask', { text: String(q).slice(0, 600) })];
     const a = r.acts && r.acts.length === 1 ? r.acts[0] : null;
     if (a && (a.auto || (mode() === 'direct' && DIRECT_OK(a)))) {
-      try { const res = await run(a, env, { direct: true }); if (res && res.say) { out.push(mk('say', { text: res.say, acts: (res.acts || []).map(cleanAct), eph: !!res.eph })); return out; } }
-      catch (e) { out.push(mk('say', { text: (r.text || '') + '\n⚠️ ' + (e && e.message ? e.message : 'L’action n’a pas pu aboutir.'), links: r.links || [], acts: r.acts.map(cleanAct), chips: r.chips || [] })); return out; }
+      try { const res = await run(a, env, { direct: true }); if (res && res.say) { out.push(sign(mk('say', { text: res.say, acts: (res.acts || []).map(cleanAct), eph: !!res.eph }), true)); return out; } }
+      catch (e) { out.push(sign(mk('say', { text: (r.text || '') + '\n⚠️ ' + (e && e.message ? e.message : 'L’action n’a pas pu aboutir.'), links: r.links || [], acts: r.acts.map(cleanAct), chips: r.chips || [] }), true)); return out; }
     }
-    out.push(mk('say', { text: r.text + (r.hint ? '\n' + r.hint : ''), links: r.links || [], acts: (r.acts || []).map(cleanAct), chips: r.chips || [] }));
+    out.push(sign(mk('say', { text: r.text + (r.hint ? '\n' + r.hint : ''), links: r.links || [], acts: (r.acts || []).map(cleanAct), chips: r.chips || [] })));
     return out;
   }
   // Résultat d'un bouton → réponse à afficher (ou rien)
   async function press(act, env) {
     const r = await run(act, env, {});
     if (!r) return { items: [], done: false };
-    return { items: r.say ? [mk('say', { text: r.say, acts: (r.acts || []).map(cleanAct), eph: !!r.eph })] : [], done: !r.nodone, clear: !!r.clear };
+    return { items: r.say ? [sign(mk('say', { text: r.say, acts: (r.acts || []).map(cleanAct), eph: !!r.eph }), true)] : [], done: !r.nodone, clear: !!r.clear };
   }
   const failItem = (e) => mk('say', { text: '⚠️ ' + (e && e.message ? e.message : 'L’action n’a pas pu aboutir. Réessayez.') });
 

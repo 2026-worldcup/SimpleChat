@@ -436,7 +436,7 @@ Piaf.views.chat = (route) => {
   function updateMentions() {
     const caret = ta.selectionStart ?? ta.value.length, m = /(^|\s)@([^\s@]{0,30})$/u.exec(ta.value.slice(0, caret));
     if (!m || editing) { mentionPop.hidden = true; pop.items = []; return; }
-    const q = norm(m[2]), cands = [...(isGroup() ? [...members.values()].filter((x) => !x.is_me).map((x) => ({ name: x.display_name, id: x.user_id })) : []), { name: 'Talk2Piaf', t2p: true }];
+    const q = norm(m[2]), cands = [...(isGroup() ? [...members.values()].filter((x) => !x.is_me).map((x) => ({ name: x.display_name, id: x.user_id })) : []), { name: 'Talk2Piaf', t2p: true }, { name: 'Talk2Piaf Actions', t2p: 'actions' }];
     pop = { items: cands.filter((c) => norm(c.name).split(/\s+/).some((w) => w.startsWith(q))).slice(0, 6), idx: 0, start: caret - m[2].length - 1 };
     drawMentions();
   }
@@ -445,7 +445,7 @@ Piaf.views.chat = (route) => {
     mentionPop.hidden = false;
     mentionPop.replaceChildren(...pop.items.map((c, i) => h('button', { type: 'button', role: 'option', class: 'mention-item' + (i === pop.idx ? ' on' : ''), 'aria-selected': String(i === pop.idx),
       onpointerdown: (e) => { e.preventDefault(); pickMention(c); } },
-      c.t2p ? Piaf.assistantAvatar(30) : avatar(c.name, 30, c.id), h('span', { class: 'mention-name' }, c.name), c.t2p ? h('span', { class: 'muted small' }, 'Assistant · réponse visible par vous seul') : null)));
+      c.t2p === 'actions' ? Piaf.assistantActionsAvatar(30) : c.t2p ? Piaf.assistantAvatar(30) : avatar(c.name, 30, c.id), h('span', { class: 'mention-name' }, c.name), c.t2p ? h('span', { class: 'muted small' }, c.t2p === 'actions' ? 'Actions · pour vous seul' : 'Assistant · pour vous seul') : null)));
   }
   function pickMention(c) {
     const caret = ta.selectionStart ?? ta.value.length, ins = '@' + c.name + ' ';
@@ -494,9 +494,9 @@ Piaf.views.chat = (route) => {
     if (links.length) extras.push(h('div', { class: 't2p-links' }, links));
     if (m.acts && m.acts.length) extras.push(h('div', { class: 't2p-acts' }, m.acts.map((a, j) => h('button', { type: 'button', class: 't2p-act' + (a.done ? ' done' : ''), disabled: !!a.done, onclick: (e) => t2pPress(m, j, e.currentTarget) }, a.l))));
     if (isLast && m.chips && m.chips.length) extras.push(h('div', { class: 't2p-chips' }, m.chips.map((c) => h('button', { type: 'button', class: 't2p-chip', onclick: () => askAssistant(c.t) }, c.l))));
-    const bubble = h('div', { class: 'bubble first last t2p-bubble ' + (ask ? 'mine t2p-ask' : 't2p-say'), tabindex: '0', role: 'button', 'aria-haspopup': 'dialog', 'aria-label': ask ? 'Votre demande à Talk2Piaf' : 'Réponse de Talk2Piaf', onclick: () => t2pMenu(m),
+    const bubble = h('div', { class: 'bubble first last t2p-bubble ' + (ask ? 'mine t2p-ask' : 't2p-say'), tabindex: '0', role: 'button', 'aria-haspopup': 'dialog', 'aria-label': ask ? 'Votre demande à Talk2Piaf' : m.by === 'actions' ? 'Réponse de Talk2Piaf Actions' : 'Réponse de Talk2Piaf', onclick: () => t2pMenu(m),
       onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); t2pMenu(m); } } },
-      h('div', { class: 'sender t2p-name' }, Piaf.assistantAvatar(16), ask ? 'Ma demande à Talk2Piaf' : 'Talk2Piaf'),
+      h('div', { class: 'sender t2p-name' }, m.by === 'actions' ? Piaf.assistantActionsAvatar(16) : Piaf.assistantAvatar(16), ask ? 'Ma demande à Talk2Piaf' : m.by === 'actions' ? 'Talk2Piaf Actions' : 'Talk2Piaf'),
       h('div', { class: 'text' }, ask ? richText(m.text) : Piaf.assistantInline(m.text)),
       h('div', { class: 'meta' }, h('time', { datetime: m.at }, fmt.time(m.at)), h('span', null, ' · visible par vous seul, sur cet appareil')));
     return h('div', { class: 'msg t2p-msg' + (ask ? ' mine' : '') + ' gap', role: 'listitem', 'data-id': m.id }, bubble, extras.length ? h('div', { class: 't2p-extras' + (ask ? ' mine' : '') }, extras) : null);
