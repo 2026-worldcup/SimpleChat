@@ -346,12 +346,28 @@ function shadowBlob(){
 function setCheck(id, status, text){
   $('d-'+id).className = 'dot ' + status; $('s-'+id).textContent = text;
 }
+// Teste réellement la réception de données d'orientation (et pas seulement l'existence de l'API)
+function probeSensors(ms = 1200){
+  return new Promise(res => {
+    if(!('DeviceOrientationEvent' in window)) return res(false);
+    if(typeof DeviceOrientationEvent.requestPermission === 'function') return res(true); // iOS : autorisation demandée au lancement
+    let done = false;
+    const h = e => { if(e.alpha !== null && e.beta !== null) fin(true); };
+    const fin = v => {
+      if(done) return; done = true;
+      removeEventListener('deviceorientation', h, true); removeEventListener('deviceorientationabsolute', h, true);
+      res(v);
+    };
+    addEventListener('deviceorientation', h, true); addEventListener('deviceorientationabsolute', h, true);
+    setTimeout(() => fin(false), ms);
+  });
+}
 async function checkCompat(){
   setCheck('https', isSecure?'ok':'no', isSecure?'Active':'Requise (HTTPS)');
   const hasCam = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
   setCheck('cam', hasCam && isSecure ? 'ok' : 'no', hasCam ? (isSecure?'Disponible':'Bloquée sans HTTPS') : 'Indisponible');
-  const hasOr = 'DeviceOrientationEvent' in window;
-  setCheck('orient', hasOr?'ok':'mid', hasOr?'Disponibles':'Non détectés (glisser pour regarder)');
+  setCheck('orient', 'mid', 'Vérification…');
+  probeSensors().then(ok => setCheck('orient', ok ? 'ok' : 'mid', ok ? 'Disponibles' : 'Indisponibles · suivi par la caméra'));
   let xr = false;
   try{ xr = !!(navigator.xr && await navigator.xr.isSessionSupported('immersive-ar')); }catch(e){}
   state.xrSupported = xr;
