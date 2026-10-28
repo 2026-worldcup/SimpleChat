@@ -173,7 +173,8 @@
 
     <footer>
       Pour une expérience optimale : Chrome sur Android (WebXR complet) ou Safari sur iOS (mode caméra).<br>
-      L'application doit être servie en HTTPS (ou localhost) pour accéder à la caméra.
+      L'application doit être servie en HTTPS (ou localhost) pour accéder à la caméra.<br>
+      Version 1.3
     </footer>
   </div>
 </main>
@@ -370,8 +371,11 @@ async function checkCompat(){
   probeSensors().then(ok => setCheck('orient', ok ? 'ok' : 'mid', ok ? 'Disponibles' : 'Indisponibles · suivi par la caméra'));
   let xr = false;
   try{ xr = !!(navigator.xr && await navigator.xr.isSessionSupported('immersive-ar')); }catch(e){}
+  let failed = false;   // un lancement WebXR a déjà échoué récemment sur cet appareil
+  try{ failed = Date.now() - Number(localStorage.getItem('spatia_xr_failed') || 0) < 86400000; }catch(e){}
+  if(xr && failed) xr = false;
   state.xrSupported = xr;
-  setCheck('xr', xr?'ok':'mid', xr?'Pris en charge':'Non pris en charge');
+  setCheck('xr', xr ? 'ok' : 'mid', xr ? 'Pris en charge' : (failed ? 'Échec sur cet appareil' : 'Non pris en charge'));
   $('startBtn').textContent = xr ? 'Lancer l\'expérience AR' : 'Lancer en mode caméra';
   $('camBtn').hidden = !xr;
   $('startNote').textContent = xr
@@ -462,6 +466,9 @@ function render(t, frame){
       camera.quaternion.multiply(_q1);
       camera.quaternion.multiply(_q0.setFromAxisAngle(_zee,-o));
       if(look.yaw){ const qy = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), look.yaw); camera.quaternion.premultiply(qy); }
+    }else if(state.gsActive){
+      camera.quaternion.copy(_q1).multiply(gsQ);
+      if(look.yaw){ const qy = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), look.yaw); camera.quaternion.premultiply(qy); }
     }else{
       _e.set(look.pitch, look.yaw, 0, 'YXZ'); camera.quaternion.setFromEuler(_e);
     }
@@ -536,6 +543,7 @@ async function startXR(){
     document.querySelectorAll('.interactive').forEach(el => el.addEventListener('beforexrselect', e => e.preventDefault()));
   }catch(err){
     console.warn(err);
+    try{ localStorage.setItem('spatia_xr_failed', String(Date.now())); }catch(e){}
     leaveApp();
     toast('WebXR indisponible, passage en mode caméra');
     startCamera();
@@ -564,7 +572,9 @@ async function startCamera(){
   attachDrag();
   await waitSensors(1500);
   if(state.mode !== 'cam') return;
-  if(state.sensorActive){
+  if(!state.sensorActive) await startGenericSensor();   // 2e méthode : Generic Sensor API
+  if(state.mode !== 'cam') return;
+  if(state.sensorActive || state.gsActive){
     setStatus('ok','Capteurs de mouvement actifs');
     toast('Visez, puis appuyez sur « Placer »');
   }else if(videoStream){
@@ -572,6 +582,23 @@ async function startCamera(){
   }else{
     toast('Glissez pour regarder autour de vous');
   }
+}
+const gsQ = new THREE.Quaternion();
+async function startGenericSensor(){
+  const Sen = window.RelativeOrientationSensor;
+  if(!Sen) return;
+  try{
+    for(const n of ['accelerometer','gyroscope']){
+      try{ const r = await navigator.permissions.query({ name:n }); if(r.state === 'denied') return; }catch(e){}
+    }
+    const s = new Sen({ frequency:60, referenceFrame:'screen' });
+    state.gs = s;
+    s.addEventListener('reading', () => { if(s.quaternion){ gsQ.fromArray(s.quaternion); state.gsActive = true; } });
+    s.addEventListener('error', () => { state.gsActive = false; });
+    s.start();
+    const t0 = performance.now();
+    while(!state.gsActive && performance.now() - t0 < 1200) await new Promise(r => setTimeout(r, 100));
+  }catch(e){}
 }
 function waitSensors(ms){
   return new Promise(res => {
@@ -595,6 +622,9 @@ function startVisualTracking(){
 function stopVisualTracking(){ if(vt){ clearInterval(vt.timer); vt = null; } }
 function visualStep(){
   if(!vt || state.mode !== 'cam' || video.readyState < 2) return;
+  if(state.sensorActive || state.gsActive){   // les capteurs ont fini par répondre : on les préfère
+    stopVisualTracking(); setStatus('ok','Capteurs de mouvement actifs'); return;
+  }
   const { W, H, g } = vt;
   g.drawImage(video, 0, 0, W, H);
   const d = g.getImageData(0, 0, W, H).data;
@@ -647,6 +677,8 @@ async function attachSensors(){
 function detachSensors(){
   removeEventListener('deviceorientationabsolute', onOrient, true);
   removeEventListener('deviceorientation', onOrient, true);
+  if(state.gs){ try{ state.gs.stop(); }catch(e){} state.gs = null; }
+  state.gsActive = false;
   state.sensorActive = false;
 }
 
