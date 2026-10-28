@@ -497,7 +497,7 @@ function showApp(mode){
 function leaveApp(){
   state.mode = null; clearAll();
   if(reticle) reticle.visible = false;
-  stopCamera(); detachSensors(); detachDrag();
+  stopVisualTracking(); stopCamera(); detachSensors(); detachDrag();
   $('app').classList.remove('on'); $('landing').style.display = '';
   video.style.display = 'none';
   stage.style.background = '';
@@ -543,10 +543,71 @@ async function startCamera(){
     setStatus('mid','Caméra indisponible — mode démo');
     toast('Caméra non accessible : mode démo 3D');
   }
-  // Capteurs
+  // Capteurs, avec repli sur le suivi visuel si le téléphone n'a pas de gyroscope
   await attachSensors();
   attachDrag();
-  setTimeout(()=>{ if(state.mode==='cam') toast(state.sensorActive ? 'Visez, puis appuyez sur « Placer »' : 'Glissez pour regarder autour de vous'); }, 600);
+  await waitSensors(1500);
+  if(state.mode !== 'cam') return;
+  if(state.sensorActive){
+    setStatus('ok','Capteurs de mouvement actifs');
+    toast('Visez, puis appuyez sur « Placer »');
+  }else if(videoStream){
+    startVisualTracking();
+  }else{
+    toast('Glissez pour regarder autour de vous');
+  }
+}
+function waitSensors(ms){
+  return new Promise(res => {
+    const t0 = performance.now();
+    (function poll(){ if(state.sensorActive || performance.now() - t0 > ms) res(); else setTimeout(poll, 100); })();
+  });
+}
+
+/* ---------- Suivi visuel (sans gyroscope) : flux optique global ---------- */
+let vt = null;
+function startVisualTracking(){
+  if(vt || !videoStream) return;
+  const W = 64, H = Math.max(24, Math.round(W * (video.videoHeight || 480) / (video.videoWidth || 640)));
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d', { willReadFrequently:true });
+  vt = { W, H, g, prev:null, timer:null };
+  setStatus('ok','Suivi visuel actif (sans gyroscope)');
+  toast('Pas de gyroscope : suivi par la caméra. Bougez doucement.');
+  vt.timer = setInterval(visualStep, 45);
+}
+function stopVisualTracking(){ if(vt){ clearInterval(vt.timer); vt = null; } }
+function visualStep(){
+  if(!vt || state.mode !== 'cam' || video.readyState < 2) return;
+  const { W, H, g } = vt;
+  g.drawImage(video, 0, 0, W, H);
+  const d = g.getImageData(0, 0, W, H).data;
+  const cur = new Float32Array(W * H);
+  for(let i = 0; i < W * H; i++) cur[i] = d[i*4]*.299 + d[i*4+1]*.587 + d[i*4+2]*.114;
+  const prev = vt.prev; vt.prev = cur;
+  if(!prev) return;
+  const R = 6, m = R + 1;
+  let best = 1e18, bdx = 0, bdy = 0, sad0 = 0; const sc = {};
+  for(let dy = -R; dy <= R; dy++) for(let dx = -R; dx <= R; dx++){
+    let s = 0, n = 0;
+    for(let y = m; y < H - m; y += 2){
+      const row = y * W, prow = (y - dy) * W;
+      for(let x = m; x < W - m; x += 2){ s += Math.abs(cur[row + x] - prev[prow + x - dx]); n++; }
+    }
+    s /= n; sc[dx + ',' + dy] = s;
+    if(dx === 0 && dy === 0) sad0 = s;
+    if(s < best){ best = s; bdx = dx; bdy = dy; }
+  }
+  if(best > sad0 * 0.92 || sad0 < 2) return;      // pas de mouvement fiable
+  const sub = (a, b, c) => { const den = a - 2*b + c; return den > 1e-6 ? .5 * (a - c) / den : 0; };
+  let fx = bdx, fy = bdy;
+  if(Math.abs(bdx) < R) fx += sub(sc[(bdx-1) + ',' + bdy], best, sc[(bdx+1) + ',' + bdy]);
+  if(Math.abs(bdy) < R) fy += sub(sc[bdx + ',' + (bdy-1)], best, sc[bdx + ',' + (bdy+1)]);
+  const vw = video.videoWidth || 640, vh = video.videoHeight || 480;
+  const k = (vw / W) * Math.max(innerWidth / vw, innerHeight / vh);   // px écran par px réduit
+  const f = (innerHeight / 2) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  look.yaw += Math.atan(fx * k / f);
+  look.pitch = THREE.MathUtils.clamp(look.pitch + Math.atan(fy * k / f), -1.45, 1.45);
 }
 function stopCamera(){ if(videoStream){ videoStream.getTracks().forEach(t=>t.stop()); videoStream = null; } video.srcObject = null; }
 
