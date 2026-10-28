@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0b1020">
+<title>Spatia AR — Placement d'objets 3D en réalité augmentée</title>
+<meta name="description" content="Spatia AR : placez et visualisez des objets 3D dans votre environnement grâce à la réalité augmentée, directement depuis le navigateur.">
+<style>
+  :root{
+    --bg:#0b1020; --bg2:#121a33; --panel:rgba(14,20,40,.78); --line:rgba(255,255,255,.12);
+    --text:#eef2ff; --muted:#9aa6c7; --accent:#4f8cff; --accent2:#22d3ee; --ok:#34d399; --warn:#fbbf24; --err:#f87171;
+    --radius:16px; --safe-b:env(safe-area-inset-bottom,0px); --safe-t:env(safe-area-inset-top,0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+  button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+  button:focus-visible,input:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
+
+  /* ---------- Landing ---------- */
+  #landing{position:fixed;inset:0;overflow-y:auto;
+    background:radial-gradient(1200px 600px at 80% -10%,rgba(79,140,255,.25),transparent 60%),
+               radial-gradient(900px 500px at -10% 110%,rgba(34,211,238,.18),transparent 60%),var(--bg)}
+  .wrap{max-width:1040px;margin:0 auto;padding:calc(20px + var(--safe-t)) 22px 40px}
+  header.top{display:flex;align-items:center;justify-content:space-between;padding:6px 0 28px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.2px}
+  .logo{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 6px 20px rgba(79,140,255,.4)}
+  .badge{font-size:12px;color:var(--muted);border:1px solid var(--line);padding:5px 10px;border-radius:99px}
+  .hero{display:grid;grid-template-columns:1.1fr .9fr;gap:36px;align-items:center;padding:20px 0 30px}
+  h1{font-size:clamp(30px,5.2vw,52px);line-height:1.05;margin:0 0 16px;letter-spacing:-.02em}
+  h1 span{background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lead{color:var(--muted);font-size:clamp(15px,2vw,18px);line-height:1.6;margin:0 0 26px;max-width:52ch}
+  .cta{display:flex;flex-wrap:wrap;gap:12px}
+  .btn{padding:14px 22px;border-radius:12px;font-weight:600;transition:transform .15s,box-shadow .15s,background .15s}
+  .btn:active{transform:scale(.97)}
+  .btn.primary{background:linear-gradient(135deg,var(--accent),#6aa5ff);box-shadow:0 10px 30px rgba(79,140,255,.35)}
+  .btn.primary:hover{box-shadow:0 14px 36px rgba(79,140,255,.5)}
+  .btn.ghost{border:1px solid var(--line);background:rgba(255,255,255,.04)}
+  .btn.ghost:hover{background:rgba(255,255,255,.09)}
+  .btn[disabled]{opacity:.5;pointer-events:none}
+  .visual{aspect-ratio:1/1;border-radius:24px;border:1px solid var(--line);position:relative;overflow:hidden;
+    background:linear-gradient(160deg,var(--bg2),#0a0f20)}
+  .visual canvas{width:100%;height:100%;display:block}
+  .visual .tag{position:absolute;left:14px;bottom:14px;font-size:12px;color:var(--muted);
+    background:var(--panel);border:1px solid var(--line);padding:6px 10px;border-radius:99px;backdrop-filter:blur(8px)}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:10px}
+  .card{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:var(--radius);padding:20px}
+  .card h3{margin:0 0 8px;font-size:16px}
+  .card p{margin:0;color:var(--muted);font-size:14px;line-height:1.55}
+  .ico{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;margin-bottom:12px;
+    background:rgba(79,140,255,.15);color:var(--accent)}
+  .compat{margin-top:26px;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px}
+  .compat h2{font-size:14px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+  .checks{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .chk{display:flex;align-items:center;gap:10px;font-size:14px}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--muted);flex:none}
+  .dot.ok{background:var(--ok);box-shadow:0 0 10px var(--ok)} .dot.no{background:var(--err)} .dot.mid{background:var(--warn)}
+  .chk small{display:block;color:var(--muted);font-size:12px}
+  footer{margin-top:30px;color:var(--muted);font-size:12px;text-align:center;line-height:1.6}
+
+  /* ---------- App AR ---------- */
+  #app{position:fixed;inset:0;display:none;background:#05070f}
+  #app.on{display:block}
+  #video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none}
+  #stage{position:absolute;inset:0;touch-action:none}
+  #stage canvas{display:block;width:100%;height:100%}
+  #hud{position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between;
+    padding:calc(12px + var(--safe-t)) 12px calc(12px + var(--safe-b))}
+  #hud .interactive{pointer-events:auto}
+  .bar{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .pill{background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    border-radius:99px;padding:9px 14px;font-size:13px;display:flex;align-items:center;gap:8px}
+  .iconbtn{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--panel);
+    border:1px solid var(--line);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+  #cross{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;pointer-events:none;display:none}
+  #cross::before,#cross::after{content:"";position:absolute;background:rgba(255,255,255,.9);border-radius:2px}
+  #cross::before{left:50%;top:0;bottom:0;width:2px;margin-left:-1px;clip-path:polygon(0 0,100% 0,100% 35%,0 35%,0 65%,100% 65%,100% 100%,0 100%)}
+  #cross::after{top:50%;left:0;right:0;height:2px;margin-top:-1px;clip-path:polygon(0 0,35% 0,35% 100%,0 100%,65% 100%,65% 0,100% 0,100% 100%)}
+  #toast{position:absolute;left:50%;top:calc(70px + var(--safe-t));transform:translateX(-50%);max-width:88%;text-align:center;
+    background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(12px);padding:10px 16px;border-radius:12px;
+    font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none}
+  #toast.on{opacity:1}
+  .sheet{background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    border-radius:20px;padding:14px;max-width:560px;width:100%;margin:0 auto}
+  .row{display:flex;align-items:center;gap:10px}
+  .shapes{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+  .shapes::-webkit-scrollbar{display:none}
+  .chip{flex:none;padding:9px 14px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.05);font-size:13px;font-weight:500}
+  .chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent)}
+  .swatches{display:flex;gap:8px}
+  .sw{width:28px;height:28px;border-radius:50%;border:2px solid transparent;box-shadow:0 0 0 1px var(--line)}
+  .sw[aria-pressed="true"]{border-color:#fff}
+  .sliders{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin:12px 0}
+  .sl label{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  .actions{display:flex;gap:8px;align-items:center}
+  .place{flex:1;padding:14px;border-radius:14px;font-weight:700;background:linear-gradient(135deg,var(--accent),#6aa5ff);
+    box-shadow:0 8px 24px rgba(79,140,255,.4)}
+  .place:active{transform:scale(.98)}
+  .sm{width:48px;height:48px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.06);display:grid;place-items:center}
+  .sm[aria-pressed="true"]{background:rgba(34,211,238,.25);border-color:var(--accent2)}
+  .hidden{display:none!important}
+
+  @media (max-width:820px){
+    .hero{grid-template-columns:1fr;gap:22px}
+    .visual{max-height:320px;aspect-ratio:auto;height:300px}
+    .grid{grid-template-columns:1fr}
+    .checks{grid-template-columns:1fr 1fr}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<!-- ======================= LANDING ======================= -->
+<main id="landing">
+  <div class="wrap">
+    <header class="top">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M12 22V12M12 12L3 7M12 12l9-5"/></svg>
+        </div>
+        <span>Spatia AR</span>
+      </div>
+      <span class="badge">Sans installation · 100 % navigateur</span>
+    </header>
+
+    <section class="hero">
+      <div>
+        <h1>Visualisez vos objets 3D <span>dans le monde réel</span></h1>
+        <p class="lead">Placez, redimensionnez et explorez des modèles 3D directement dans votre environnement grâce à la réalité augmentée. Aucune application à télécharger : tout fonctionne dans votre navigateur, et rien ne quitte votre appareil.</p>
+        <div class="cta">
+          <button class="btn primary" id="startBtn" type="button">Lancer l'expérience AR</button>
+          <button class="btn ghost" id="camBtn" type="button" hidden>Mode caméra (compatibilité)</button>
+        </div>
+        <p id="startNote" class="lead" style="margin:14px 0 0;font-size:13px"></p>
+      </div>
+      <div class="visual" aria-hidden="true">
+        <canvas id="heroCanvas"></canvas>
+        <span class="tag">Aperçu 3D interactif</span>
+      </div>
+    </section>
+
+    <section class="grid" aria-label="Fonctionnalités">
+      <article class="card">
+        <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div>
+        <h3>Détection des surfaces</h3>
+        <p>Sur les appareils compatibles WebXR, les objets se posent précisément sur le sol et les tables détectés par la caméra.</p>
+      </article>
+      <article class="card">
+        <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg></div>
+        <h3>Mode caméra universel</h3>
+        <p>Sinon, flux caméra et capteurs de mouvement : visez, placez, tournez autour de l'objet, y compris sur iPhone et iPad.</p>
+      </article>
+      <article class="card">
+        <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div>
+        <h3>Confidentialité</h3>
+        <p>Le flux vidéo est traité localement. Aucune image n'est envoyée ni enregistrée sur un serveur.</p>
+      </article>
+    </section>
+
+    <section class="compat" aria-labelledby="ct">
+      <h2 id="ct">Compatibilité de votre appareil</h2>
+      <div class="checks">
+        <div class="chk"><span class="dot" id="d-https"></span><div>Connexion sécurisée<small id="s-https">…</small></div></div>
+        <div class="chk"><span class="dot" id="d-cam"></span><div>Caméra<small id="s-cam">…</small></div></div>
+        <div class="chk"><span class="dot" id="d-orient"></span><div>Capteurs de mouvement<small id="s-orient">…</small></div></div>
+        <div class="chk"><span class="dot" id="d-xr"></span><div>WebXR (surfaces)<small id="s-xr">…</small></div></div>
+      </div>
+    </section>
+
+    <footer>
+      Pour une expérience optimale : Chrome sur Android (WebXR complet) ou Safari sur iOS (mode caméra).<br>
+      L'application doit être servie en HTTPS (ou localhost) pour accéder à la caméra.
+    </footer>
+  </div>
+</main>
+
+<!-- ======================= APP AR ======================= -->
+<div id="app" aria-live="polite">
+  <video id="video" playsinline muted autoplay></video>
+  <div id="stage"></div>
+  <div id="cross"></div>
+
+  <div id="hud">
+    <div>
+      <div class="bar">
+        <button class="iconbtn interactive" id="exitBtn" type="button" aria-label="Quitter la réalité augmentée">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+        <div class="pill"><span class="dot" id="stDot"></span><span id="stText">Initialisation…</span></div>
+        <div class="pill" title="Objets placés"><span id="count">0</span> obj.</div>
+      </div>
+      <div id="toast" role="status"></div>
+    </div>
+
+    <section class="sheet interactive" aria-label="Contrôles">
+      <div class="shapes" id="shapes" role="group" aria-label="Forme"></div>
+      <div class="row" style="margin-top:10px;justify-content:space-between">
+        <div class="swatches" id="swatches" role="group" aria-label="Couleur"></div>
+        <button class="chip" id="spinBtn" type="button" aria-pressed="true">Rotation auto</button>
+      </div>
+      <div class="sliders">
+        <div class="sl"><label for="size">Taille <b id="sizeV">30 cm</b></label>
+          <input id="size" type="range" min="5" max="150" value="30"></div>
+        <div class="sl" id="distWrap"><label for="dist">Distance <b id="distV">2,0 m</b></label>
+          <input id="dist" type="range" min="5" max="60" value="20"></div>
+      </div>
+      <div class="actions">
+        <button class="place" id="placeBtn" type="button">Placer l'objet</button>
+        <button class="sm" id="undoBtn" type="button" aria-label="Annuler le dernier objet">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg></button>
+        <button class="sm" id="clearBtn" type="button" aria-label="Tout effacer">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button>
+        <button class="sm" id="shotBtn" type="button" aria-label="Capturer l'image">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+/* =====================================================================
+   Utilitaires & état
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+const isSecure = window.isSecureContext;
+const SHAPES = [
+  { id:'cube',    label:'Cube' },
+  { id:'sphere',  label:'Sphère' },
+  { id:'torus',   label:'Nœud torique' },
+  { id:'pyramid', label:'Pyramide' },
+  { id:'crystal', label:'Cristal' },
+  { id:'arrow',   label:'Flèche' },
+];
+const COLORS = ['#4f8cff','#22d3ee','#34d399','#fbbf24','#f87171','#c084fc','#f5f5f5'];
+
+const state = {
+  mode: null,            // 'xr' | 'cam'
+  shape: 'cube',
+  color: COLORS[0],
+  sizeCm: 30,
+  distDm: 20,            // décimètres
+  spin: true,
+  placed: [],
+  xrSupported: false,
+  sensorActive: false,
+};
+
+/* =====================================================================
+   Fabrique d'objets 3D
+   ===================================================================== */
+function makeMaterial(color){
+  return new THREE.MeshStandardMaterial({ color, metalness:.25, roughness:.35 });
+}
+function buildShape(id, color){
+  const mat = makeMaterial(color);
+  let obj;
+  switch(id){
+    case 'sphere':  obj = new THREE.Mesh(new THREE.SphereGeometry(.5,48,32), mat); break;
+    case 'torus':   obj = new THREE.Mesh(new THREE.TorusKnotGeometry(.35,.12,160,24), mat); break;
+    case 'pyramid': obj = new THREE.Mesh(new THREE.ConeGeometry(.5,.8,4), mat); obj.rotation.y = Math.PI/4; break;
+    case 'crystal': obj = new THREE.Mesh(new THREE.IcosahedronGeometry(.5,0), mat); mat.flatShading = true; break;
+    case 'arrow': {
+      obj = new THREE.Group();
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(.1,.1,.55,24), mat);
+      shaft.position.y = .275;
+      const head = new THREE.Mesh(new THREE.ConeGeometry(.22,.35,24), mat);
+      head.position.y = .725;
+      obj.add(shaft, head); break;
+    }
+    default:        obj = new THREE.Mesh(new THREE.BoxGeometry(.8,.8,.8), mat);
+  }
+  // Normalisation : plus grande dimension = 1, base posée sur y = 0
+  const inner = new THREE.Group(); inner.add(obj);
+  const box = new THREE.Box3().setFromObject(inner);
+  const size = box.getSize(new THREE.Vector3());
+  const k = 1 / Math.max(size.x, size.y, size.z);
+  obj.scale.multiplyScalar(k);
+  const box2 = new THREE.Box3().setFromObject(inner);
+  obj.position.y -= box2.min.y;
+  const c = box2.getCenter(new THREE.Vector3());
+  obj.position.x -= c.x; obj.position.z -= c.z;
+
+  const root = new THREE.Group();
+  root.add(inner);
+  root.userData.inner = inner;
+  return root;
+}
+
+let shadowTex;
+function shadowBlob(){
+  if(!shadowTex){
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const g = c.getContext('2d');
+    const gr = g.createRadialGradient(64,64,4,64,64,62);
+    gr.addColorStop(0,'rgba(0,0,0,.45)'); gr.addColorStop(1,'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0,0,128,128);
+    shadowTex = new THREE.CanvasTexture(c);
+  }
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1.7,1.7),
+    new THREE.MeshBasicMaterial({ map:shadowTex, transparent:true, depthWrite:false }));
+  m.rotation.x = -Math.PI/2; m.position.y = .003;
+  return m;
+}
+
+/* =====================================================================
+   Aperçu 3D de la page d'accueil
+   ===================================================================== */
+(function hero(){
+  const cv = $('heroCanvas');
+  const r = new THREE.WebGLRenderer({ canvas:cv, antialias:true, alpha:true });
+  r.setPixelRatio(Math.min(devicePixelRatio,2));
+  const sc = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(40,1,.1,50); cam.position.set(0,.9,3.1); cam.lookAt(0,.45,0);
+  sc.add(new THREE.HemisphereLight(0xffffff,0x334466,1.3));
+  const d = new THREE.DirectionalLight(0xffffff,2); d.position.set(2,4,3); sc.add(d);
+  const grid = new THREE.GridHelper(6,24,0x4f8cff,0x24305a); grid.material.transparent = true; grid.material.opacity = .5; sc.add(grid);
+  const items = [];
+  [['torus','#4f8cff',0,0],['cube','#22d3ee',-1.2,.2],['crystal','#c084fc',1.2,.2]].forEach(([s,c,x,z],i)=>{
+    const o = buildShape(s,c); o.position.set(x,0,z); o.scale.setScalar(s==='torus'?1.3:.8); sc.add(o); items.push(o);
+  });
+  function size(){ const w = cv.clientWidth||300, h = cv.clientHeight||300; r.setSize(w,h,false); cam.aspect = w/h; cam.updateProjectionMatrix(); }
+  new ResizeObserver(size).observe(cv); size();
+  let heroOn = true;
+  document.addEventListener('visibilitychange',()=>{ heroOn = !document.hidden; });
+  (function loop(t){
+    if(state.mode === null && heroOn){
+      items.forEach((o,i)=>{ o.userData.inner.rotation.y = t*.0006*(i%2?-1:1); o.position.y = .05*Math.sin(t*.0015+i); });
+      r.render(sc,cam);
+    }
+    requestAnimationFrame(loop);
+  })(0);
+})();
+
+/* =====================================================================
+   Compatibilité
+   ===================================================================== */
+function setCheck(id, status, text){
+  $('d-'+id).className = 'dot ' + status; $('s-'+id).textContent = text;
+}
+async function checkCompat(){
+  setCheck('https', isSecure?'ok':'no', isSecure?'Active':'Requise (HTTPS)');
+  const hasCam = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  setCheck('cam', hasCam && isSecure ? 'ok' : 'no', hasCam ? (isSecure?'Disponible':'Bloquée sans HTTPS') : 'Indisponible');
+  const hasOr = 'DeviceOrientationEvent' in window;
+  setCheck('orient', hasOr?'ok':'mid', hasOr?'Disponibles':'Non détectés (glisser pour regarder)');
+  let xr = false;
+  try{ xr = !!(navigator.xr && await navigator.xr.isSessionSupported('immersive-ar')); }catch(e){}
+  state.xrSupported = xr;
+  setCheck('xr', xr?'ok':'mid', xr?'Pris en charge':'Non pris en charge');
+  $('startBtn').textContent = xr ? 'Lancer l\'expérience AR' : 'Lancer en mode caméra';
+  $('camBtn').hidden = !xr;
+  $('startNote').textContent = xr
+    ? 'Votre appareil supporte la détection de surfaces : les objets se poseront sur le sol ou les tables.'
+    : 'Mode caméra : visez avec l\'appareil, puis appuyez sur « Placer » pour déposer l\'objet devant vous.';
+}
+checkCompat();
+
+/* =====================================================================
+   Moteur 3D partagé
+   ===================================================================== */
+let renderer, scene, camera, reticle, hitTestSource = null, hitTestRequested = false;
+let videoStream = null, lastT = 0;
+const stage = $('stage'), video = $('video');
+
+function initEngine(){
+  if(renderer) return;
+  renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, preserveDrawingBuffer:false });
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setClearColor(0x000000,0);
+  renderer.xr.enabled = true;
+  stage.appendChild(renderer.domElement);
+
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(65,1,.01,60);
+  scene.add(new THREE.HemisphereLight(0xffffff,0x556070,1.5));
+  const dl = new THREE.DirectionalLight(0xffffff,2.2); dl.position.set(1.5,4,2); scene.add(dl);
+
+  reticle = new THREE.Mesh(
+    new THREE.RingGeometry(.07,.095,40).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:.95 }));
+  reticle.matrixAutoUpdate = false; reticle.visible = false; scene.add(reticle);
+
+  const ctrl = renderer.xr.getController(0);
+  ctrl.addEventListener('select', () => { if(state.mode==='xr') placeObject(); });
+  scene.add(ctrl);
+
+  addEventListener('resize', resize); resize();
+  renderer.setAnimationLoop(render);
+}
+function resize(){
+  if(!renderer) return;
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w,h); camera.aspect = w/h; camera.updateProjectionMatrix();
+}
+
+/* ---------- Placement ---------- */
+function applyScale(o){ o.scale.setScalar(o.userData.sizeM); }
+function placeObject(){
+  const o = buildShape(state.shape, state.color);
+  o.add(shadowBlob());
+  o.userData.sizeM = state.sizeCm/100;
+  o.userData.spinPhase = Math.random()*6;
+  if(state.mode === 'xr'){
+    if(!reticle.visible){ toast('Visez une surface pour la détecter'); return; }
+    o.position.setFromMatrixPosition(reticle.matrix);
+  }else{
+    const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+    o.position.copy(camera.position).addScaledVector(dir, state.distDm/10);
+    // pose l'objet à hauteur de visée, légèrement orienté vers l'utilisateur
+    const yaw = Math.atan2(dir.x, dir.z); o.rotation.y = yaw + Math.PI;
+  }
+  applyScale(o);
+  scene.add(o); state.placed.push(o); updateCount();
+  if(navigator.vibrate) navigator.vibrate(15);
+}
+function updateCount(){ $('count').textContent = state.placed.length; }
+function undo(){ const o = state.placed.pop(); if(o){ disposeObj(o); updateCount(); } }
+function clearAll(){ state.placed.splice(0).forEach(disposeObj); updateCount(); }
+function disposeObj(o){
+  scene.remove(o);
+  o.traverse(n=>{ if(n.geometry) n.geometry.dispose(); if(n.material && n.material!==undefined && !n.material.map) n.material.dispose(); });
+}
+
+/* ---------- Boucle de rendu ---------- */
+const _q1 = new THREE.Quaternion(-Math.sqrt(.5),0,0,Math.sqrt(.5));
+const _e = new THREE.Euler(), _q0 = new THREE.Quaternion(), _zee = new THREE.Vector3(0,0,1);
+let orient = { alpha:0, beta:0, gamma:0 }, look = { yaw:0, pitch:0 };
+
+function render(t, frame){
+  const dt = Math.min((t - lastT)/1000 || 0, .1); lastT = t;
+
+  if(state.mode === 'cam'){
+    if(state.sensorActive){
+      const a = THREE.MathUtils.degToRad(orient.alpha), b = THREE.MathUtils.degToRad(orient.beta), g = THREE.MathUtils.degToRad(orient.gamma);
+      const o = THREE.MathUtils.degToRad((screen.orientation && screen.orientation.angle) || window.orientation || 0);
+      _e.set(b,a,-g,'YXZ'); camera.quaternion.setFromEuler(_e);
+      camera.quaternion.multiply(_q1);
+      camera.quaternion.multiply(_q0.setFromAxisAngle(_zee,-o));
+      if(look.yaw){ const qy = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), look.yaw); camera.quaternion.premultiply(qy); }
+    }else{
+      _e.set(look.pitch, look.yaw, 0, 'YXZ'); camera.quaternion.setFromEuler(_e);
+    }
+  }
+
+  if(frame && state.mode === 'xr'){
+    const session = renderer.xr.getSession();
+    const ref = renderer.xr.getReferenceSpace();
+    if(!hitTestRequested){
+      hitTestRequested = true;
+      session.requestReferenceSpace('viewer').then(vs => session.requestHitTestSource({ space:vs })).then(src => { hitTestSource = src; })
+        .catch(()=> toast('Détection de surfaces indisponible'));
+      session.addEventListener('end', ()=>{ hitTestSource = null; hitTestRequested = false; leaveApp(); }, { once:true });
+    }
+    if(hitTestSource){
+      const hits = frame.getHitTestResults(hitTestSource);
+      if(hits.length){
+        const pose = hits[0].getPose(ref);
+        reticle.visible = true; reticle.matrix.fromArray(pose.transform.matrix);
+        setStatus('ok','Surface détectée — touchez pour placer');
+      }else{
+        reticle.visible = false; setStatus('mid','Déplacez lentement l\'appareil pour détecter une surface');
+      }
+    }
+  }
+
+  if(state.spin) state.placed.forEach(o => { o.userData.inner.rotation.y += dt*.7; });
+  renderer.render(scene, camera);
+}
+
+/* =====================================================================
+   Sessions : WebXR et mode caméra
+   ===================================================================== */
+function setStatus(kind, text){ $('stDot').className = 'dot ' + kind; $('stText').textContent = text; }
+let toastTimer;
+function toast(msg){
+  const t = $('toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.classList.remove('on'), 2600);
+}
+function showApp(mode){
+  state.mode = mode;
+  $('landing').style.display = 'none';
+  $('app').classList.add('on');
+  $('cross').style.display = mode==='cam' ? 'block' : 'none';
+  $('distWrap').classList.toggle('hidden', mode!=='cam');
+  $('shotBtn').classList.toggle('hidden', mode!=='cam');
+  $('placeBtn').textContent = mode==='xr' ? 'Placer sur la surface' : 'Placer l\'objet';
+}
+function leaveApp(){
+  state.mode = null; clearAll();
+  if(reticle) reticle.visible = false;
+  stopCamera(); detachSensors(); detachDrag();
+  $('app').classList.remove('on'); $('landing').style.display = '';
+  video.style.display = 'none';
+  stage.style.background = '';
+  renderer && renderer.setAnimationLoop(render);
+}
+
+async function startXR(){
+  if(!isSecure){ toast('HTTPS requis'); return startCamera(); }
+  try{
+    initEngine();
+    showApp('xr'); setStatus('mid','Démarrage de la session AR…');
+    const session = await navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures:['hit-test'],
+      optionalFeatures:['dom-overlay','local-floor'],
+      domOverlay:{ root: $('app') }
+    });
+    renderer.xr.setReferenceSpaceType('local');
+    await renderer.xr.setSession(session);
+    // empêche les boutons de l'interface de déclencher un « select » XR
+    document.querySelectorAll('.interactive').forEach(el => el.addEventListener('beforexrselect', e => e.preventDefault()));
+  }catch(err){
+    console.warn(err);
+    leaveApp();
+    toast('WebXR indisponible, passage en mode caméra');
+    startCamera();
+  }
+}
+
+async function startCamera(){
+  initEngine();
+  showApp('cam'); setStatus('mid','Accès à la caméra…');
+  camera.position.set(0,0,0); look.yaw = look.pitch = 0;
+  stage.style.background = '';
+  // Caméra
+  try{
+    if(!navigator.mediaDevices || !isSecure) throw new Error('no-cam');
+    videoStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:'environment' }, width:{ ideal:1920 }, height:{ ideal:1080 } }, audio:false });
+    video.srcObject = videoStream; video.style.display = 'block'; await video.play().catch(()=>{});
+    setStatus('ok','Caméra active');
+  }catch(e){
+    video.style.display = 'none';
+    stage.style.background = 'radial-gradient(circle at 50% 40%,#1a2547,#070a16)';
+    setStatus('mid','Caméra indisponible — mode démo');
+    toast('Caméra non accessible : mode démo 3D');
+  }
+  // Capteurs
+  await attachSensors();
+  attachDrag();
+  setTimeout(()=>{ if(state.mode==='cam') toast(state.sensorActive ? 'Visez, puis appuyez sur « Placer »' : 'Glissez pour regarder autour de vous'); }, 600);
+}
+function stopCamera(){ if(videoStream){ videoStream.getTracks().forEach(t=>t.stop()); videoStream = null; } video.srcObject = null; }
+
+/* ---------- Capteurs d'orientation ---------- */
+function onOrient(e){
+  if(e.alpha === null || e.beta === null) return;
+  orient.alpha = e.alpha; orient.beta = e.beta; orient.gamma = e.gamma;
+  state.sensorActive = true;
+}
+async function attachSensors(){
+  state.sensorActive = false;
+  try{
+    if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
+      const r = await DeviceOrientationEvent.requestPermission();
+      if(r !== 'granted'){ toast('Capteurs refusés : glissez pour regarder'); return; }
+    }
+  }catch(e){}
+  addEventListener('deviceorientationabsolute', onOrient, true);
+  addEventListener('deviceorientation', onOrient, true);
+}
+function detachSensors(){
+  removeEventListener('deviceorientationabsolute', onOrient, true);
+  removeEventListener('deviceorientation', onOrient, true);
+  state.sensorActive = false;
+}
+
+/* ---------- Regard au doigt / souris (sans capteurs) ---------- */
+let drag = null;
+const onDown = e => { if(state.mode!=='cam' || e.target.closest('.interactive')) return; drag = { x:e.clientX, y:e.clientY }; };
+const onMove = e => {
+  if(!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+  look.yaw -= dx*.005;
+  if(!state.sensorActive) look.pitch = THREE.MathUtils.clamp(look.pitch - dy*.005, -1.4, 1.4);
+};
+const onUp = () => { drag = null; };
+function attachDrag(){ stage.addEventListener('pointerdown', onDown); addEventListener('pointermove', onMove); addEventListener('pointerup', onUp); }
+function detachDrag(){ stage.removeEventListener('pointerdown', onDown); removeEventListener('pointermove', onMove); removeEventListener('pointerup', onUp); }
+
+/* ---------- Capture d'écran ---------- */
+function screenshot(){
+  renderer.render(scene, camera);
+  const w = innerWidth*Math.min(devicePixelRatio,2), h = innerHeight*Math.min(devicePixelRatio,2);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.fillStyle = '#05070f'; g.fillRect(0,0,w,h);
+  if(video.videoWidth){
+    const s = Math.max(w/video.videoWidth, h/video.videoHeight);
+    const vw = video.videoWidth*s, vh = video.videoHeight*s;
+    g.drawImage(video,(w-vw)/2,(h-vh)/2,vw,vh);
+  }
+  g.drawImage(renderer.domElement,0,0,w,h);
+  g.font = `600 ${Math.round(w*.03)}px sans-serif`; g.fillStyle = 'rgba(255,255,255,.8)'; g.textAlign = 'right';
+  g.fillText('Spatia AR', w-w*.03, h-h*.02);
+  c.toBlob(b => {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(b);
+    a.download = 'spatia-ar-' + Date.now() + '.png'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+    toast('Capture enregistrée');
+  },'image/png');
+}
+
+/* =====================================================================
+   Interface
+   ===================================================================== */
+(function buildUI(){
+  const sh = $('shapes');
+  SHAPES.forEach(s => {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.type = 'button'; b.textContent = s.label; b.setAttribute('aria-pressed', s.id===state.shape);
+    b.addEventListener('click', () => {
+      state.shape = s.id; [...sh.children].forEach(c => c.setAttribute('aria-pressed', c===b));
+    });
+    sh.appendChild(b);
+  });
+  const sw = $('swatches');
+  COLORS.forEach(c => {
+    const b = document.createElement('button');
+    b.className = 'sw'; b.type = 'button'; b.style.background = c; b.setAttribute('aria-label','Couleur '+c);
+    b.setAttribute('aria-pressed', c===state.color);
+    b.addEventListener('click', () => {
+      state.color = c; [...sw.children].forEach(x => x.setAttribute('aria-pressed', x===b));
+    });
+    sw.appendChild(b);
+  });
+})();
+
+const fmtM = dm => (dm/10).toFixed(1).replace('.',',') + ' m';
+$('size').addEventListener('input', e => {
+  state.sizeCm = +e.target.value; $('sizeV').textContent = state.sizeCm + ' cm';
+  const last = state.placed[state.placed.length-1];
+  if(last){ last.userData.sizeM = state.sizeCm/100; applyScale(last); }
+});
+$('dist').addEventListener('input', e => { state.distDm = +e.target.value; $('distV').textContent = fmtM(state.distDm); });
+$('spinBtn').addEventListener('click', e => { state.spin = !state.spin; e.currentTarget.setAttribute('aria-pressed', state.spin); });
+$('placeBtn').addEventListener('click', placeObject);
+$('undoBtn').addEventListener('click', undo);
+$('clearBtn').addEventListener('click', clearAll);
+$('shotBtn').addEventListener('click', screenshot);
+$('startBtn').addEventListener('click', () => state.xrSupported ? startXR() : startCamera());
+$('camBtn').addEventListener('click', startCamera);
+$('exitBtn').addEventListener('click', () => {
+  const s = renderer && renderer.xr.getSession && renderer.xr.getSession();
+  if(s) s.end(); else leaveApp();
+});
+</script>
+</body>
+</html>
