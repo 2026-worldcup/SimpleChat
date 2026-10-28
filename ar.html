@@ -174,7 +174,7 @@
     <footer>
       Pour une expérience optimale : Chrome sur Android (WebXR complet) ou Safari sur iOS (mode caméra).<br>
       L'application doit être servie en HTTPS (ou localhost) pour accéder à la caméra.<br>
-      Version 1.3
+      Version 1.4
     </footer>
   </div>
 </main>
@@ -658,28 +658,30 @@ function visualStep(){
 function stopCamera(){ if(videoStream){ videoStream.getTracks().forEach(t=>t.stop()); videoStream = null; } video.srcObject = null; }
 
 /* ---------- Capteurs d'orientation ---------- */
-function onOrient(e){
-  if(e.alpha === null || e.beta === null) return;
-  orient.alpha = e.alpha; orient.beta = e.beta; orient.gamma = e.gamma;
-  state.sensorActive = true;
+// Une seule source à la fois : mélanger « absolu » (boussole) et « relatif » fait sauter la vue.
+let absSeen = false, sensorSeen = false;
+function storeOrient(e){ orient.alpha = e.alpha; orient.beta = e.beta; orient.gamma = e.gamma; sensorSeen = true; state.sensorActive = true; }
+function onOrientAbs(e){ if(e.alpha === null || e.beta === null) return; absSeen = true; storeOrient(e); }
+function onOrient(e){ if(absSeen || e.alpha === null || e.beta === null) return; storeOrient(e); }
+// Écoute permanente dès le chargement (Android) : Chrome n'émet parfois qu'à chaque changement, donc on garde la dernière valeur.
+if(!(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function')){
+  addEventListener('deviceorientationabsolute', onOrientAbs, true);
+  addEventListener('deviceorientation', onOrient, true);
 }
 async function attachSensors(){
-  state.sensorActive = false;
+  state.sensorActive = sensorSeen;
   try{
     if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
       const r = await DeviceOrientationEvent.requestPermission();
       if(r !== 'granted'){ toast('Capteurs refusés : glissez pour regarder'); return; }
     }
   }catch(e){}
-  addEventListener('deviceorientationabsolute', onOrient, true);
+  addEventListener('deviceorientationabsolute', onOrientAbs, true);   // sans effet si déjà écouté
   addEventListener('deviceorientation', onOrient, true);
 }
 function detachSensors(){
-  removeEventListener('deviceorientationabsolute', onOrient, true);
-  removeEventListener('deviceorientation', onOrient, true);
   if(state.gs){ try{ state.gs.stop(); }catch(e){} state.gs = null; }
   state.gsActive = false;
-  state.sensorActive = false;
 }
 
 /* ---------- Regard au doigt / souris (sans capteurs) ---------- */
